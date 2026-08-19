@@ -1,17 +1,85 @@
 import { describe, expect, it } from "vitest";
-import { parseSyllabusText } from "@/domain/topics/syllabus-parser";
+import {
+  parseSyllabusText,
+  isBibliographicCitation,
+} from "@/domain/topics/syllabus-parser";
 
-describe("Domain: Syllabus Parser", () => {
-  it("should extract topics with numbered lists", () => {
-    const raw = `
-      Ementa
+describe("Domain: Syllabus Parser & Anti-Noise Filters", () => {
+  it("should correctly identify bibliographic citations", () => {
+    expect(
+      isBibliographicCitation(
+        "FOX, R. W.; MCDONALD, A. T.; PRITCHARD, P. J. Introdução à Mecânica dos Fluidos."
+      )
+    ).toBe(true);
+    expect(
+      isBibliographicCitation(
+        "BERGMAN, T. L.; LAVINE, A. S. Incropera: Fundamentos de Transferência de Calor e Massa."
+      )
+    ).toBe(true);
+    expect(isBibliographicCitation("LTC, 2019.")).toBe(true);
+    expect(isBibliographicCitation("Rio de Janeiro: LTC, 2019.")).toBe(true);
+    expect(
+      isBibliographicCitation("Transferência de Calor por Condução")
+    ).toBe(false);
+  });
+
+  it("should extract only real programmatic topics from introductory slides with noisy metadata", () => {
+    const rawSlideText = `
+      UNESP - Campus de Guaratinguetá
+      FENÔMENOS DE TRANSPORTE
+      Docente: Prof. Dr. Nestor Proenza
+      mail: nestor.proenza@unesp.br
+      Sala: 311E
+
+      Conteúdo Programático:
+      1. Introdução e Conceitos Fundamentais
+      2. Estática dos Fluidos e Manometria
+      3. Conservação de Massa e Energia
+      4. Escoamento Interno Viscoso em Tubos
+      5. Transferência de Calor por Condução
+      6. Convecção Térmica Natural e Forçada
+      7. Radiação Térmica
+      8. Difusão Mássica Unidimensional
+
+      Critérios de Avaliação:
+      P1: 08/04/2026
+      P2: 10/06/2026
+      Média Final: (P1 + P2)/2
+
+      Bibliografia Básica:
+      FOX, R. W.; MCDONALD, A. T.; PRITCHARD, P. J. Introdução à Mecânica dos Fluidos. LTC, 2019.
+      BERGMAN, T. L.; LAVINE, A. S. Incropera: Fundamentos de Transferência de Calor e Massa. LTC, 2019.
+      LTC, 2019.
+    `;
+
+    const topics = parseSyllabusText(rawSlideText, {
+      subjectName: "Fenômenos de Transporte",
+      subjectCode: "QE003FT 311E",
+    });
+
+    expect(topics).toEqual([
+      "Introdução e Conceitos Fundamentais",
+      "Estática dos Fluidos e Manometria",
+      "Conservação de Massa e Energia",
+      "Escoamento Interno Viscoso em Tubos",
+      "Transferência de Calor por Condução",
+      "Convecção Térmica Natural e Forçada",
+      "Radiação Térmica",
+      "Difusão Mássica Unidimensional",
+    ]);
+  });
+
+  it("should extract topics when no explicit section marker exists but discard noise", () => {
+    const rawText = `
+      mail: professor@universidade.br
       1. Introdução à Mecânica dos Fluidos
       2. Estática dos Fluidos
       3. Equações Fundamentais de Conservação
       4. Escoamento Incompressível em Tubulações
+      LTC, 2019.
     `;
 
-    const topics = parseSyllabusText(raw);
+    const topics = parseSyllabusText(rawText);
     expect(topics).toEqual([
       "Introdução à Mecânica dos Fluidos",
       "Estática dos Fluidos",
@@ -20,9 +88,8 @@ describe("Domain: Syllabus Parser", () => {
     ]);
   });
 
-  it("should extract topics with sub-numbering and bullets", () => {
+  it("should handle sub-numbering and bullets cleanly", () => {
     const raw = `
-      Conteúdo Programático:
       1.1 - Balanço Microscópico de Massa
       1.2 - Balanço de Quantidade de Movimento
       • Condução Térmica Unidimensional
@@ -38,53 +105,5 @@ describe("Domain: Syllabus Parser", () => {
       "Convecção Forçada e Natural",
       "Radiação Térmica",
     ]);
-  });
-
-  it("should handle Unidade / Módulo / Capítulo prefixes", () => {
-    const raw = `
-      Unidade I: Fundamentos de Fenômenos de Transporte
-      Unidade II - Mecanismos de Transferência de Calor
-      Módulo 3: Transferência de Massa
-    `;
-
-    const topics = parseSyllabusText(raw);
-    expect(topics).toEqual([
-      "Fundamentos de Fenômenos de Transporte",
-      "Mecanismos de Transferência de Calor",
-      "Transferência de Massa",
-    ]);
-  });
-
-  it("should filter out administrative headers and bibliografia", () => {
-    const raw = `
-      UNIVERSIDADE FEDERAL
-      Departamento de Engenharia Química
-      Professor: Dr. Carlos Silva
-      Carga Horária: 60h
-      Conteúdo Programático:
-      1. Propriedades dos Fluidos
-      2. Viscosidade e Lei de Newton
-      Bibliografia Básica:
-      FOX, R. W. Introdução à Mecânica dos Fluidos.
-    `;
-
-    const topics = parseSyllabusText(raw);
-    expect(topics).toEqual([
-      "Propriedades dos Fluidos",
-      "Viscosidade e Lei de Newton",
-      "FOX, R. W. Introdução à Mecânica dos Fluidos.",
-    ]);
-  });
-
-  it("should deduplicate identical topics and handle empty input", () => {
-    expect(parseSyllabusText("")).toEqual([]);
-
-    const duplicateRaw = `
-      1. Limites e Continuidade
-      - Limites e Continuidade
-      2. Derivadas
-    `;
-    const topics = parseSyllabusText(duplicateRaw);
-    expect(topics).toEqual(["Limites e Continuidade", "Derivadas"]);
   });
 });

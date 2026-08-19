@@ -22,12 +22,23 @@ import {
   Trash2,
   Plus,
   CheckCircle2,
+  CheckSquare,
+  Square,
+  Sparkles,
 } from "lucide-react";
+
+interface TopicDraftItem {
+  id: string;
+  title: string;
+  selected: boolean;
+}
 
 interface BatchTopicModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subjectId: string;
+  subjectName?: string | null;
+  subjectCode?: string | null;
   assessments?: Array<{ id: string; title: string }>;
   onSuccess?: () => void;
 }
@@ -36,6 +47,8 @@ export function BatchTopicModal({
   open,
   onOpenChange,
   subjectId,
+  subjectName,
+  subjectCode,
   assessments = [],
   onSuccess,
 }: BatchTopicModalProps) {
@@ -48,8 +61,8 @@ export function BatchTopicModal({
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Parsed / extracted topics list
-  const [topicsList, setTopicsList] = React.useState<string[]>([]);
+  // Parsed / extracted topics list with selection status
+  const [topicDrafts, setTopicDrafts] = React.useState<TopicDraftItem[]>([]);
   const [sourceFileName, setSourceFileName] = React.useState<string | null>(null);
   const [newTopicInput, setNewTopicInput] = React.useState("");
 
@@ -61,13 +74,23 @@ export function BatchTopicModal({
 
   React.useEffect(() => {
     setMode("FILE");
-    setTopicsList([]);
+    setTopicDrafts([]);
     setSourceFileName(null);
     setRawText("");
     setNewTopicInput("");
     setAssessmentId("");
     setError(null);
   }, [open]);
+
+  const setTopicsFromList = (titles: string[], sourceName: string) => {
+    const drafts: TopicDraftItem[] = titles.map((t, idx) => ({
+      id: `${Date.now()}-${idx}`,
+      title: t,
+      selected: true,
+    }));
+    setTopicDrafts(drafts);
+    setSourceFileName(sourceName);
+  };
 
   // Handle file drop or selection
   const handleProcessFile = async (file: File) => {
@@ -85,7 +108,10 @@ export function BatchTopicModal({
         fileName.endsWith(".csv")
       ) {
         const text = await file.text();
-        const extracted = parseSyllabusText(text);
+        const extracted = parseSyllabusText(text, {
+          subjectName,
+          subjectCode,
+        });
 
         if (extracted.length === 0) {
           setError("Nenhum tópico programático identificado no arquivo de texto.");
@@ -93,8 +119,7 @@ export function BatchTopicModal({
           return;
         }
 
-        setTopicsList(extracted);
-        setSourceFileName(file.name);
+        setTopicsFromList(extracted, file.name);
         setExtracting(false);
         return;
       }
@@ -110,11 +135,13 @@ export function BatchTopicModal({
             : (pdfData.text as string) || "";
 
           if (textContent && textContent.trim().length > 0) {
-            const extracted = parseSyllabusText(textContent);
+            const extracted = parseSyllabusText(textContent, {
+              subjectName,
+              subjectCode,
+            });
 
             if (extracted.length > 0) {
-              setTopicsList(extracted);
-              setSourceFileName(file.name);
+              setTopicsFromList(extracted, file.name);
               setExtracting(false);
               return;
             }
@@ -127,14 +154,15 @@ export function BatchTopicModal({
       // 3. Server-side extraction fallback
       const formData = new FormData();
       formData.append("file", file);
+      if (subjectName) formData.append("subjectName", subjectName);
+      if (subjectCode) formData.append("subjectCode", subjectCode);
 
       const res = await parseSyllabusFileAction(formData);
 
       if (!res.success || !res.topics) {
         setError(res.error || "Erro ao extrair tópicos do arquivo.");
       } else {
-        setTopicsList(res.topics);
-        setSourceFileName(res.fileName || file.name);
+        setTopicsFromList(res.topics, res.fileName || file.name);
       }
     } catch {
       setError("Erro ao ler o arquivo enviado. Tente outro formato ou cole o texto na aba ao lado.");
@@ -170,34 +198,72 @@ export function BatchTopicModal({
     }
   };
 
+  const handleToggleSelect = (index: number) => {
+    setTopicDrafts((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, selected: !item.selected } : item
+      )
+    );
+  };
+
+  const handleSelectAll = (select: boolean) => {
+    setTopicDrafts((prev) =>
+      prev.map((item) => ({ ...item, selected: select }))
+    );
+  };
+
+  const handleUpdateTopicTitle = (index: number, newTitle: string) => {
+    setTopicDrafts((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, title: newTitle } : item
+      )
+    );
+  };
+
   const handleRemoveTopic = (index: number) => {
-    setTopicsList((prev) => prev.filter((_, i) => i !== index));
+    setTopicDrafts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleAddManualTopic = (e: React.FormEvent) => {
     e.preventDefault();
     if (newTopicInput.trim().length > 0) {
-      setTopicsList((prev) => [...prev, newTopicInput.trim()]);
+      setTopicDrafts((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${prev.length}`,
+          title: newTopicInput.trim(),
+          selected: true,
+        },
+      ]);
       setNewTopicInput("");
     }
   };
 
   // Convert rawText in manual mode
   const handleParseManualText = () => {
-    const extracted = parseSyllabusText(rawText);
+    const extracted = parseSyllabusText(rawText, {
+      subjectName,
+      subjectCode,
+    });
     if (extracted.length === 0) {
       setError("Nenhum tópico válido encontrado no texto.");
       return;
     }
-    setTopicsList(extracted);
-    setSourceFileName("Texto colado manualmente");
+    setTopicsFromList(extracted, "Texto colado manualmente");
   };
 
-  // Submit to database
+  const selectedCount = topicDrafts.filter((t) => t.selected).length;
+
+  // Submit selected topics to database
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (topicsList.length === 0) {
-      setError("Adicione pelo menos um tópico antes de confirmar.");
+    const selectedTopics = topicDrafts
+      .filter((t) => t.selected)
+      .map((t) => t.title.trim())
+      .filter((t) => t.length > 0);
+
+    if (selectedTopics.length === 0) {
+      setError("Selecione pelo menos um tópico para cadastrar.");
       return;
     }
 
@@ -205,7 +271,7 @@ export function BatchTopicModal({
     setError(null);
 
     try {
-      const joinedText = topicsList.join("\n");
+      const joinedText = selectedTopics.join("\n");
       const res = await batchCreateTopicsAction({
         subjectId,
         rawText: joinedText,
@@ -247,7 +313,7 @@ export function BatchTopicModal({
         )}
 
         {/* Mode Selector Tabs (only if no topics extracted yet) */}
-        {topicsList.length === 0 && (
+        {topicDrafts.length === 0 && (
           <div className="flex rounded-lg bg-neutral-900 border border-neutral-800 p-0.5 mb-4 text-xs">
             <button
               type="button"
@@ -276,7 +342,7 @@ export function BatchTopicModal({
 
         <div className="space-y-4 text-sm">
           {/* STATE 1: Dropzone File Mode (No topics yet) */}
-          {topicsList.length === 0 && mode === "FILE" && (
+          {topicDrafts.length === 0 && mode === "FILE" && (
             <div>
               <input
                 ref={fileInputRef}
@@ -301,10 +367,10 @@ export function BatchTopicModal({
                   <div className="text-center space-y-2 py-4">
                     <Loader2 className="h-10 w-10 text-purple-400 animate-spin mx-auto" />
                     <p className="text-xs font-semibold text-neutral-200">
-                      Extraindo e analisando tópicos do arquivo...
+                      Filtrando e identificando tópicos da ementa...
                     </p>
                     <p className="text-[11px] text-neutral-400">
-                      Isso leva apenas alguns instantes.
+                      Removendo e-mails, dados do professor e bibliografias.
                     </p>
                   </div>
                 ) : (
@@ -338,7 +404,7 @@ export function BatchTopicModal({
           )}
 
           {/* STATE 2: Manual Text Mode (No topics yet) */}
-          {topicsList.length === 0 && mode === "TEXT" && (
+          {topicDrafts.length === 0 && mode === "TEXT" && (
             <div className="space-y-3">
               <textarea
                 rows={8}
@@ -356,58 +422,99 @@ export function BatchTopicModal({
                 disabled={rawText.trim().length === 0}
                 className="w-full text-xs"
               >
-                Analisar e Extrair Tópicos
+                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
+                Filtrar e Extrair Tópicos
               </Button>
             </div>
           )}
 
-          {/* STATE 3: Extracted Topics Preview List */}
-          {topicsList.length > 0 && (
+          {/* STATE 3: Extracted Topics Preview List with Checkboxes */}
+          {topicDrafts.length > 0 && (
             <div className="space-y-3">
+              {/* Header with Counter & Batch Select */}
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-neutral-950 border border-neutral-850">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   <span className="text-xs font-semibold text-neutral-200">
-                    {topicsList.length} tópicos identificados
+                    {selectedCount} de {topicDrafts.length} tópicos selecionados
                   </span>
                   {sourceFileName && (
-                    <span className="text-[11px] text-neutral-400 truncate max-w-xs">
+                    <span className="text-[11px] text-neutral-400 truncate max-w-xs hidden sm:inline">
                       ({sourceFileName})
                     </span>
                   )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setTopicsList([]);
-                    setSourceFileName(null);
-                  }}
-                  className="h-6 text-[11px] text-neutral-400 hover:text-white p-1"
-                >
-                  Trocar arquivo
-                </Button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAll(selectedCount !== topicDrafts.length)}
+                    className="text-[11px] text-neutral-400 hover:text-neutral-200 underline decoration-neutral-700"
+                  >
+                    {selectedCount === topicDrafts.length
+                      ? "Desmarcar todos"
+                      : "Selecionar todos"}
+                  </button>
+                  <span className="text-neutral-700">|</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setTopicDrafts([]);
+                      setSourceFileName(null);
+                    }}
+                    className="h-6 text-[11px] text-neutral-400 hover:text-white p-1"
+                  >
+                    Trocar arquivo
+                  </Button>
+                </div>
               </div>
 
-              {/* Scrollable list of detected topics */}
-              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                {topicsList.map((topic, idx) => (
+              {/* Scrollable list of detected topics with editable text and checkboxes */}
+              <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+                {topicDrafts.map((draft, idx) => (
                   <div
-                    key={idx}
-                    className="flex items-center justify-between gap-2 p-2 rounded bg-neutral-900/60 border border-neutral-800 text-xs"
+                    key={draft.id}
+                    className={`flex items-center justify-between gap-2 p-1.5 px-2.5 rounded border transition-colors ${
+                      draft.selected
+                        ? "bg-neutral-900/80 border-neutral-800"
+                        : "bg-neutral-950/40 border-neutral-900 opacity-50"
+                    }`}
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="text-[10px] font-mono text-neutral-500 w-5 shrink-0 text-right">
-                        {idx + 1}.
-                      </span>
-                      <span className="text-neutral-200 truncate">{topic}</span>
-                    </div>
+                    {/* Checkbox */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelect(idx)}
+                      className="text-neutral-400 hover:text-white shrink-0"
+                    >
+                      {draft.selected ? (
+                        <CheckSquare className="h-4 w-4 text-purple-400" />
+                      ) : (
+                        <Square className="h-4 w-4 text-neutral-600" />
+                      )}
+                    </button>
+
+                    <span className="text-[10px] font-mono text-neutral-500 w-4 shrink-0 text-right">
+                      {idx + 1}.
+                    </span>
+
+                    {/* Editable Topic Title */}
+                    <input
+                      type="text"
+                      value={draft.title}
+                      onChange={(e) => handleUpdateTopicTitle(idx, e.target.value)}
+                      className={`flex-1 bg-transparent text-xs text-neutral-200 focus:bg-neutral-950 focus:px-2 focus:py-1 focus:rounded focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${
+                        !draft.selected && "line-through text-neutral-500"
+                      }`}
+                    />
+
+                    {/* Individual Delete Button */}
                     <button
                       type="button"
                       onClick={() => handleRemoveTopic(idx)}
                       className="p-1 text-neutral-500 hover:text-red-400 shrink-0"
-                      title="Excluir tópico da lista"
+                      title="Excluir da lista"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -421,7 +528,7 @@ export function BatchTopicModal({
                   type="text"
                   value={newTopicInput}
                   onChange={(e) => setNewTopicInput(e.target.value)}
-                  placeholder="+ Adicionar outro tópico..."
+                  placeholder="+ Adicionar outro conteúdo à lista..."
                   className="flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-700 focus:outline-none"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -474,15 +581,18 @@ export function BatchTopicModal({
             Cancelar
           </Button>
 
-          {topicsList.length > 0 && (
-            <Button type="submit" disabled={loading || extracting}>
+          {topicDrafts.length > 0 && (
+            <Button
+              type="submit"
+              disabled={loading || extracting || selectedCount === 0}
+            >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Cadastrando...
                 </>
               ) : (
-                `Cadastrar ${topicsList.length} Tópicos`
+                `Cadastrar ${selectedCount} Tópico(s)`
               )}
             </Button>
           )}

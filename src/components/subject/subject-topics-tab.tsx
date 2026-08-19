@@ -62,10 +62,14 @@ export interface TopicWithAssessment extends TopicItem {
 
 export function SubjectTopicsTab({
   subjectId,
+  subjectName,
+  subjectCode,
   topics = [],
   assessments = [],
 }: {
   subjectId: string;
+  subjectName?: string | null;
+  subjectCode?: string | null;
   topics?: TopicWithAssessment[];
   assessments?: Array<{ id: string; title: string }>;
 }) {
@@ -556,6 +560,8 @@ export function SubjectTopicsTab({
         open={batchModalOpen}
         onOpenChange={setBatchModalOpen}
         subjectId={subjectId}
+        subjectName={subjectName}
+        subjectCode={subjectCode}
         assessments={assessments}
         onSuccess={() => router.refresh()}
       />

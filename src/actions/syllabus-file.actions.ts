@@ -6,6 +6,9 @@ import { extractText } from "unpdf";
 export async function parseSyllabusFileAction(formData: FormData) {
   try {
     const file = formData.get("file") as File | null;
+    const subjectName = (formData.get("subjectName") as string) || null;
+    const subjectCode = (formData.get("subjectCode") as string) || null;
+
     if (!file) {
       return { success: false, error: "Nenhum arquivo enviado." };
     }
@@ -33,13 +36,16 @@ export async function parseSyllabusFileAction(formData: FormData) {
       };
     }
 
-    const extractedTopics = parseSyllabusText(textContent);
+    const extractedTopics = parseSyllabusText(textContent, {
+      subjectName,
+      subjectCode,
+    });
 
     if (extractedTopics.length === 0) {
       return {
         success: false,
         error:
-          "Nenhum tópico identificado no arquivo. Tente colar o texto manualmente.",
+          "Nenhum tópico programático identificado no arquivo. Tente colar o texto manualmente.",
       };
     }
 

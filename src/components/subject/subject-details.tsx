@@ -291,6 +291,8 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
         <TabsContent value="topics">
           <SubjectTopicsTab
             subjectId={subject.id}
+            subjectName={subject.name}
+            subjectCode={subject.code}
             topics={subject.topics || []}
             assessments={assessmentOptions}
           />

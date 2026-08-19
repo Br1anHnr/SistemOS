@@ -432,3 +432,32 @@ export const updateMaterialBookmarkSchema = z.object({
   type: materialBookmarkTypeSchema.optional(),
 });
 
+// ─── PDF Annotations (Fase B1) ──────────────────────────────────────────────
+
+export const pdfAnnotationTypeSchema = z.enum(
+  ["PEN", "HIGHLIGHT", "ARROW", "TEXT", "RECTANGLE"],
+  {
+    errorMap: () => ({ message: "Tipo de anotação gráfica inválido." }),
+  }
+);
+
+export const createPdfAnnotationSchema = z.object({
+  topicId: z
+    .string({ required_error: "Tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  pageNumber: z
+    .number({ required_error: "O número da página é obrigatório." })
+    .int("Número da página deve ser um inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1."),
+  type: pdfAnnotationTypeSchema,
+  data: z.record(z.any()),
+  schemaVersion: z.number().int().default(1),
+});
+
+export const updatePdfAnnotationSchema = z.object({
+  data: z.record(z.any()).optional(),
+  type: pdfAnnotationTypeSchema.optional(),
+});
+
+

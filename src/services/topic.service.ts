@@ -12,6 +12,7 @@ import {
 
 import { getNotesCountsBySubjectId } from "./topic-note.service";
 import { getBookmarksCountsBySubjectId } from "./material-bookmark.service";
+import { getAnnotationsCountsBySubjectId } from "./pdf-annotation.service";
 
 export async function getTopicsBySubjectId(subjectId: string) {
   const topicList = await db
@@ -37,15 +38,17 @@ export async function getTopicsBySubjectId(subjectId: string) {
     .where(eq(topics.subjectId, subjectId))
     .orderBy(asc(topics.orderIndex), asc(topics.createdAt));
 
-  const [notesCountMap, bookmarksCountMap] = await Promise.all([
+  const [notesCountMap, bookmarksCountMap, annotationsCountMap] = await Promise.all([
     getNotesCountsBySubjectId(subjectId).catch((): Record<string, number> => ({})),
     getBookmarksCountsBySubjectId(subjectId).catch((): Record<string, number> => ({})),
+    getAnnotationsCountsBySubjectId(subjectId).catch((): Record<string, number> => ({})),
   ]);
 
   return topicList.map((t) => ({
     ...t,
     notesCount: notesCountMap[t.id] || 0,
     bookmarksCount: bookmarksCountMap[t.id] || 0,
+    annotationsCount: annotationsCountMap[t.id] || 0,
   }));
 }
 

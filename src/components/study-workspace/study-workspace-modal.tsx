@@ -4,12 +4,10 @@ import * as React from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
-  FileText,
   ZoomIn,
   ZoomOut,
   Maximize2,
   Minimize2,
-  Download,
   X,
   PanelRightClose,
   PanelRightOpen,
@@ -18,11 +16,21 @@ import {
   BookOpen,
   UploadCloud,
   Loader2,
+  PenLine,
 } from "lucide-react";
 import { StudyPanel } from "./study-panel";
+import { AnnotationToolbar, AnnotationTool } from "./annotation-toolbar";
+import { AnnotationLayer, AnnotationData } from "./annotation-layer";
+import { PdfCanvasRenderer } from "./pdf-canvas-renderer";
 import { getPdfBlobUrl, storePdfFile } from "@/lib/pdf-storage";
 import { TopicNoteItem } from "./note-card";
 import { MaterialBookmarkItem } from "./bookmark-card";
+import {
+  getPdfAnnotationsAction,
+  createPdfAnnotationAction,
+  deletePdfAnnotationAction,
+} from "@/actions/pdf-annotation.actions";
+import { useToast } from "@/components/ui/toast";
 
 interface StudyWorkspaceModalProps {
   open: boolean;
@@ -49,8 +57,12 @@ export function StudyWorkspaceModal({
   initialNotes = [],
   initialBookmarks = [],
 }: StudyWorkspaceModalProps) {
+  const { toast } = useToast();
+
+  // Navigation & View state
   const [zoom, setZoom] = React.useState<number>(100);
   const [currentPage, setCurrentPage] = React.useState<number>(1);
+  const [totalPages, setTotalPages] = React.useState<number>(1);
   const [inputPage, setInputPage] = React.useState<string>("1");
   const [isPanelOpen, setIsPanelOpen] = React.useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
@@ -61,7 +73,21 @@ export function StudyWorkspaceModal({
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // Load PDF from IndexedDB or URL on open
+  // --- ANNOTATIONS STATE (FASE B1) ---
+  const [isAnnotationMode, setIsAnnotationMode] = React.useState<boolean>(false);
+  const [activeTool, setActiveTool] = React.useState<AnnotationTool>("PEN");
+  const [color, setColor] = React.useState<string>("#eab308");
+  const [strokeWidth, setStrokeWidth] = React.useState<number>(4);
+  const [isAnnotationVisible, setIsAnnotationVisible] = React.useState<boolean>(true);
+  const [annotations, setAnnotations] = React.useState<AnnotationData[]>([]);
+  const [isSavingAnnotation, setIsSavingAnnotation] = React.useState<boolean>(false);
+  const [lastSavedAnnotation, setLastSavedAnnotation] = React.useState<Date | null>(null);
+
+  // Undo / Redo History Stack for current page session
+  const [history, setHistory] = React.useState<AnnotationData[][]>([]);
+  const [historyIndex, setHistoryIndex] = React.useState<number>(-1);
+
+  // 1. Load PDF from IndexedDB or URL on open
   React.useEffect(() => {
     async function resolvePdfUrl() {
       if (!open) return;
@@ -120,9 +146,34 @@ export function StudyWorkspaceModal({
     resolvePdfUrl();
   }, [open, materialId, topicId, pdfUrl]);
 
-  // Navigate to specific page in PDF viewer
+  // 2. Fetch page annotations from DB whenever topicId or currentPage changes
+  React.useEffect(() => {
+    async function loadPageAnnotations() {
+      if (!open || !topicId || currentPage < 1) return;
+      try {
+        const res = await getPdfAnnotationsAction(topicId, currentPage);
+        if (res.success && res.data) {
+          const loaded = res.data.map((a: any) => ({
+            id: a.id,
+            type: a.type,
+            pageNumber: a.pageNumber,
+            data: a.data,
+          }));
+          setAnnotations(loaded);
+          setHistory([loaded]);
+          setHistoryIndex(0);
+        }
+      } catch {
+        // Continue silently
+      }
+    }
+
+    loadPageAnnotations();
+  }, [open, topicId, currentPage]);
+
+  // Page Navigator Handlers
   const handleNavigateToPage = (pageNumber: number) => {
-    if (pageNumber < 1) return;
+    if (pageNumber < 1 || (totalPages > 1 && pageNumber > totalPages)) return;
     setCurrentPage(pageNumber);
     setInputPage(pageNumber.toString());
   };
@@ -130,8 +181,10 @@ export function StudyWorkspaceModal({
   const handlePageInputSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = Number(inputPage);
-    if (!isNaN(parsed) && parsed >= 1) {
+    if (!isNaN(parsed) && parsed >= 1 && (totalPages <= 1 || parsed <= totalPages)) {
       setCurrentPage(parsed);
+    } else {
+      setInputPage(currentPage.toString());
     }
   };
 
@@ -154,11 +207,92 @@ export function StudyWorkspaceModal({
     }
   };
 
-  if (!open) return null;
+  // --- ANNOTATION ACTIONS & HISTORY ---
+  const handleAddAnnotation = async (newAnn: Omit<AnnotationData, "id">) => {
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const annotationWithId: AnnotationData = {
+      ...newAnn,
+      id: tempId,
+      pageNumber: currentPage,
+    };
 
-  const pdfViewerSource = activeUrl
-    ? `${activeUrl}#page=${currentPage}&toolbar=1&navpanes=1`
-    : null;
+    const nextAnnotations = [...annotations, annotationWithId];
+    setAnnotations(nextAnnotations);
+
+    // Update history stack
+    const nextHistory = history.slice(0, historyIndex + 1);
+    nextHistory.push(nextAnnotations);
+    setHistory(nextHistory);
+    setHistoryIndex(nextHistory.length - 1);
+
+    // Persist to server
+    setIsSavingAnnotation(true);
+    try {
+      const res = await createPdfAnnotationAction(
+        {
+          topicId,
+          materialId: materialId || null,
+          pageNumber: currentPage,
+          type: newAnn.type,
+          data: newAnn.data,
+        },
+        subjectId
+      );
+
+      if (res.success && res.data) {
+        setLastSavedAnnotation(new Date());
+        // Replace temp ID with DB ID
+        setAnnotations((prev) =>
+          prev.map((a) => (a.id === tempId ? { ...a, id: (res.data as any).id } : a))
+        );
+      }
+    } catch {
+      // Silently fail on autosave
+    } finally {
+      setIsSavingAnnotation(false);
+    }
+  };
+
+  const handleDeleteAnnotation = async (id: string) => {
+    const nextAnnotations = annotations.filter((a) => a.id !== id);
+    setAnnotations(nextAnnotations);
+
+    // Update history stack
+    const nextHistory = history.slice(0, historyIndex + 1);
+    nextHistory.push(nextAnnotations);
+    setHistory(nextHistory);
+    setHistoryIndex(nextHistory.length - 1);
+
+    if (!id.startsWith("temp-")) {
+      setIsSavingAnnotation(true);
+      try {
+        await deletePdfAnnotationAction(id, subjectId);
+        setLastSavedAnnotation(new Date());
+      } catch {
+        // Silently fail
+      } finally {
+        setIsSavingAnnotation(false);
+      }
+    }
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setAnnotations(history[prevIndex]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setAnnotations(history[nextIndex]);
+    }
+  };
+
+  if (!open) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -175,8 +309,8 @@ export function StudyWorkspaceModal({
           }`}
         >
           {/* Top Navbar */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800 bg-neutral-900/90 shrink-0">
-            {/* Title & Badge */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 bg-neutral-900/90 shrink-0">
+            {/* Left: Title & Badge */}
             <div className="flex items-center gap-2.5 min-w-0 pr-4">
               <div className="p-1.5 rounded-md bg-purple-950/70 border border-purple-800 text-purple-400 shrink-0">
                 <BookOpen className="h-4 w-4" />
@@ -198,8 +332,26 @@ export function StudyWorkspaceModal({
               </div>
             </div>
 
-            {/* Viewer Controls */}
+            {/* Right: Controls & Annotation Button */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Annotation Mode Toggle Button */}
+              {activeUrl && !isMissing && (
+                <Button
+                  size="sm"
+                  variant={isAnnotationMode ? "default" : "outline"}
+                  onClick={() => setIsAnnotationMode((prev) => !prev)}
+                  className={`h-8 text-xs gap-1.5 font-medium transition-all ${
+                    isAnnotationMode
+                      ? "bg-purple-600 hover:bg-purple-500 text-white shadow-md ring-1 ring-purple-400"
+                      : "border-purple-800/60 text-purple-300 hover:bg-purple-950/40"
+                  }`}
+                  title="Ativar ferramentas de anotação e desenho"
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                  <span>Anotar</span>
+                </Button>
+              )}
+
               {/* Page Navigator */}
               {activeUrl && !isMissing && (
                 <form
@@ -224,11 +376,17 @@ export function StudyWorkspaceModal({
                     onBlur={handlePageInputSubmit}
                     className="w-8 h-5 text-xs font-mono text-center bg-neutral-900 border border-neutral-750 rounded text-neutral-100 focus:outline-none focus:border-purple-500"
                   />
+                  {totalPages > 1 && (
+                    <span className="text-[10px] text-neutral-500 font-mono">
+                      / {totalPages}
+                    </span>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => handleNavigateToPage(currentPage + 1)}
-                    className="p-1 text-neutral-400 hover:text-white"
+                    disabled={totalPages > 1 && currentPage >= totalPages}
+                    className="p-1 text-neutral-400 hover:text-white disabled:opacity-30"
                     title="Próxima página"
                   >
                     <ChevronRight className="h-3 w-3" />
@@ -241,7 +399,7 @@ export function StudyWorkspaceModal({
                 <div className="hidden sm:flex items-center rounded-md bg-neutral-950 border border-neutral-800 p-0.5 text-xs text-neutral-300">
                   <button
                     type="button"
-                    onClick={() => setZoom((z) => Math.max(50, z - 15))}
+                    onClick={() => setZoom((z) => Math.max(50, z - 25))}
                     className="p-1 hover:text-white disabled:opacity-30"
                     title="Diminuir Zoom"
                     disabled={zoom <= 50}
@@ -253,7 +411,7 @@ export function StudyWorkspaceModal({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setZoom((z) => Math.min(200, z + 15))}
+                    onClick={() => setZoom((z) => Math.min(200, z + 25))}
                     className="p-1 hover:text-white disabled:opacity-30"
                     title="Aumentar Zoom"
                     disabled={zoom >= 200}
@@ -263,14 +421,14 @@ export function StudyWorkspaceModal({
                 </div>
               )}
 
-              {/* Toggle Study Panel Button */}
+              {/* Toggle Study Panel */}
               <Button
                 variant={isPanelOpen ? "default" : "outline"}
                 size="sm"
                 onClick={() => setIsPanelOpen((p) => !p)}
                 className={`h-8 text-xs gap-1.5 ${
                   isPanelOpen
-                    ? "bg-purple-600 hover:bg-purple-500 text-white"
+                    ? "bg-neutral-800 hover:bg-neutral-700 text-white"
                     : "border-neutral-750 text-neutral-300"
                 }`}
                 title={isPanelOpen ? "Recolher painel de estudo" : "Abrir painel de estudo"}
@@ -280,7 +438,7 @@ export function StudyWorkspaceModal({
                 ) : (
                   <PanelRightOpen className="h-3.5 w-3.5" />
                 )}
-                <span className="hidden md:inline">Painel de Estudo</span>
+                <span className="hidden md:inline">Painel</span>
               </Button>
 
               {/* Fullscreen */}
@@ -312,8 +470,30 @@ export function StudyWorkspaceModal({
           </div>
 
           {/* Main Area: Side-by-side (PDF on left + Study Panel on right) */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left: PDF Document Area */}
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Floating Annotation Toolbar (When in Annotation Mode) */}
+            {isAnnotationMode && activeUrl && !isMissing && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40">
+                <AnnotationToolbar
+                  activeTool={activeTool}
+                  onSelectTool={setActiveTool}
+                  color={color}
+                  onChangeColor={setColor}
+                  strokeWidth={strokeWidth}
+                  onChangeStrokeWidth={setStrokeWidth}
+                  canUndo={historyIndex > 0}
+                  canRedo={historyIndex < history.length - 1}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  isVisible={isAnnotationVisible}
+                  onToggleVisibility={() => setIsAnnotationVisible((v) => !v)}
+                  isSaving={isSavingAnnotation}
+                  lastSavedAt={lastSavedAnnotation}
+                />
+              </div>
+            )}
+
+            {/* Left: PDF Document Canvas Area */}
             <div className="flex-1 bg-neutral-900/40 overflow-auto flex items-center justify-center p-2 relative min-w-0">
               {loading ? (
                 <div className="text-center space-y-2">
@@ -349,21 +529,28 @@ export function StudyWorkspaceModal({
                     Selecionar PDF
                   </Button>
                 </div>
-              ) : pdfViewerSource ? (
-                <div
-                  className="w-full h-full transition-all flex items-center justify-center"
-                  style={{
-                    transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
-                    transformOrigin: "top center",
-                  }}
+              ) : activeUrl ? (
+                <PdfCanvasRenderer
+                  pdfUrl={activeUrl}
+                  pageNumber={currentPage}
+                  zoom={zoom}
+                  onLoadSuccess={(pages) => setTotalPages(pages)}
                 >
-                  <iframe
-                    key={`pdf-frame-${currentPage}`}
-                    src={pdfViewerSource}
-                    className="w-full h-full rounded-md border border-neutral-800 bg-white shadow-inner"
-                    title={topicTitle}
-                  />
-                </div>
+                  {({ width, height }) => (
+                    <AnnotationLayer
+                      pageWidth={width}
+                      pageHeight={height}
+                      activeTool={isAnnotationMode ? activeTool : "SELECT"}
+                      color={color}
+                      strokeWidth={strokeWidth}
+                      annotations={annotations}
+                      isVisible={isAnnotationVisible}
+                      onAddAnnotation={handleAddAnnotation}
+                      onUpdateAnnotation={() => {}}
+                      onDeleteAnnotation={handleDeleteAnnotation}
+                    />
+                  )}
+                </PdfCanvasRenderer>
               ) : null}
             </div>
 

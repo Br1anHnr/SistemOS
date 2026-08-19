@@ -41,6 +41,7 @@ import {
   GripVertical,
   BookOpen,
   Bookmark,
+  PenLine,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -60,6 +61,7 @@ export interface TopicWithAssessment extends TopicItem {
   completedAt?: Date | string | null;
   notesCount?: number;
   bookmarksCount?: number;
+  annotationsCount?: number;
 }
 
 export interface SubjectMaterialItem {
@@ -608,6 +610,14 @@ export function SubjectTopicsTab({
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950/40 text-emerald-300 border border-emerald-800/60">
                             <Bookmark className="h-2.5 w-2.5" />
                             {parent.bookmarksCount} marcador(es)
+                          </span>
+                        )}
+
+                        {/* ANNOTATIONS COUNT BADGE */}
+                        {parent.annotationsCount !== undefined && parent.annotationsCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-950/40 text-purple-300 border border-purple-800/60">
+                            <PenLine className="h-2.5 w-2.5" />
+                            {parent.annotationsCount} anotação(ões)
                           </span>
                         )}
 

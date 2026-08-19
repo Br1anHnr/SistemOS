@@ -34,6 +34,7 @@ import {
 import {
   SubjectTopicsTab,
   TopicWithAssessment,
+  SubjectMaterialItem,
 } from "@/components/subject/subject-topics-tab";
 import { SubjectModal } from "@/components/subject/subject-modal";
 import { deleteSubjectAction } from "@/actions/subject.actions";
@@ -58,6 +59,7 @@ export interface SubjectDetailsData {
   assessments?: AssessmentItem[];
   classSessions?: ClassSessionWithAttendance[];
   topics?: TopicWithAssessment[];
+  materials?: SubjectMaterialItem[];
 }
 
 export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
@@ -294,6 +296,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
             subjectName={subject.name}
             subjectCode={subject.code}
             topics={subject.topics || []}
+            materials={subject.materials || []}
             assessments={assessmentOptions}
           />
         </TabsContent>

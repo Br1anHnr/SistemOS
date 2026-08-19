@@ -15,6 +15,7 @@ import {
   calculateMasteryAverage,
   calculateMasteryDistribution,
   calculateEstimatedRemainingStudyHours,
+  buildTopicTree,
   MASTERY_LEVELS,
   TopicItem,
 } from "@/domain/topics";
@@ -24,8 +25,13 @@ import {
   deleteTopicAction,
   reorderTopicsAction,
 } from "@/actions/topic.actions";
+import {
+  createMaterialAction,
+  deleteMaterialAction,
+} from "@/actions/material.actions";
 import { TopicModal } from "@/components/topic/topic-modal";
 import { BatchTopicModal } from "@/components/topic/batch-topic-modal";
+import { PdfViewerModal } from "@/components/material/pdf-viewer-modal";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText,
@@ -38,16 +44,22 @@ import {
   Edit2,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Sparkles,
   Flame,
   Award,
   Filter,
+  Layers,
+  FolderOpen,
+  Eye,
+  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export interface TopicWithAssessment extends TopicItem {
   id: string;
   subjectId: string;
+  parentId?: string | null;
   title: string;
   description?: string | null;
   orderIndex: number;
@@ -60,63 +72,88 @@ export interface TopicWithAssessment extends TopicItem {
   completedAt?: Date | string | null;
 }
 
+export interface SubjectMaterialItem {
+  id: string;
+  subjectId: string;
+  topicId?: string | null;
+  title: string;
+  fileName: string;
+  fileType: string;
+  fileUrl: string;
+  fileSize?: number | null;
+  pageCount?: number | null;
+  createdAt: Date | string;
+}
+
 export function SubjectTopicsTab({
   subjectId,
   subjectName,
   subjectCode,
   topics = [],
+  materials = [],
   assessments = [],
 }: {
   subjectId: string;
   subjectName?: string | null;
   subjectCode?: string | null;
   topics?: TopicWithAssessment[];
+  materials?: SubjectMaterialItem[];
   assessments?: Array<{ id: string; title: string }>;
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const pdfInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  // Modals state
   const [topicModalOpen, setTopicModalOpen] = React.useState(false);
   const [batchModalOpen, setBatchModalOpen] = React.useState(false);
   const [editingTopic, setEditingTopic] = React.useState<TopicWithAssessment | null>(null);
+  const [targetParentId, setTargetParentId] = React.useState<string | null>(null);
 
-  const [statusFilter, setStatusFilter] = React.useState<
-    "ALL" | "PENDING" | "COMPLETED"
-  >("ALL");
+  // PDF Viewer state
+  const [pdfViewerOpen, setPdfViewerOpen] = React.useState(false);
+  const [activePdfUrl, setActivePdfUrl] = React.useState<string | null>(null);
+  const [activePdfTitle, setActivePdfTitle] = React.useState<string>("");
+  const [activePdfFileName, setActivePdfFileName] = React.useState<string>("");
+
+  // Accordion expanded state for parent modules
+  const [expandedParents, setExpandedParents] = React.useState<Record<string, boolean>>({});
+
+  // Filters
+  const [statusFilter, setStatusFilter] = React.useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
   const [assessmentFilter, setAssessmentFilter] = React.useState<string>("ALL");
 
   // Domain calculations
   const progress = React.useMemo(() => calculateTopicProgress(topics), [topics]);
   const mastery = React.useMemo(() => calculateMasteryAverage(topics), [topics]);
-  const distribution = React.useMemo(
-    () => calculateMasteryDistribution(topics),
-    [topics]
-  );
-  const remainingHours = React.useMemo(
-    () => calculateEstimatedRemainingStudyHours(topics),
-    [topics]
-  );
+  const distribution = React.useMemo(() => calculateMasteryDistribution(topics), [topics]);
+  const remainingHours = React.useMemo(() => calculateEstimatedRemainingStudyHours(topics), [topics]);
 
-  // Filtered topics
-  const filteredTopics = React.useMemo(() => {
-    return topics.filter((t) => {
-      if (t.status === "ARCHIVED") return false;
+  // Hierarchical Tree
+  const topicTree = React.useMemo(() => buildTopicTree(topics), [topics]);
 
-      if (statusFilter === "PENDING" && (t.status === "COMPLETED" || t.masteryLevel === 4)) {
-        return false;
-      }
-      if (statusFilter === "COMPLETED" && t.status !== "COMPLETED" && t.masteryLevel !== 4) {
-        return false;
-      }
+  // Parent topics list for modal dropdown
+  const parentOptions = React.useMemo(() => {
+    return topics
+      .filter((t) => !t.parentId)
+      .map((t) => ({ id: t.id, title: t.title }));
+  }, [topics]);
 
-      if (assessmentFilter !== "ALL") {
-        if (assessmentFilter === "NONE" && t.assessmentId) return false;
-        if (assessmentFilter !== "NONE" && t.assessmentId !== assessmentFilter) return false;
-      }
+  // Expand all parent modules by default
+  React.useEffect(() => {
+    const initial: Record<string, boolean> = {};
+    for (const p of topicTree) {
+      initial[p.id] = true;
+    }
+    setExpandedParents(initial);
+  }, [topicTree.length]);
 
-      return true;
-    });
-  }, [topics, statusFilter, assessmentFilter]);
+  const toggleExpand = (parentId: string) => {
+    setExpandedParents((prev) => ({
+      ...prev,
+      [parentId]: !prev[parentId],
+    }));
+  };
 
   const handleMasteryChange = async (topicId: string, level: number) => {
     try {
@@ -134,13 +171,9 @@ export function SubjectTopicsTab({
   const handleToggleComplete = async (topic: TopicWithAssessment) => {
     const isCompleted = topic.status === "COMPLETED" || topic.masteryLevel === 4;
     try {
-      const res = await toggleTopicCompleteAction(
-        topic.id,
-        subjectId,
-        !isCompleted
-      );
+      const res = await toggleTopicCompleteAction(topic.id, subjectId, !isCompleted);
       if (res.success) {
-        toast(!isCompleted ? "Tópico marcado como dominado!" : "Tópico reaberto.");
+        toast(!isCompleted ? "Marcado como dominado!" : "Reaberto para estudo.");
         router.refresh();
       } else {
         toast(res.error || "Erro ao alterar conclusão.", "error");
@@ -150,13 +183,17 @@ export function SubjectTopicsTab({
     }
   };
 
-  const handleMove = async (index: number, direction: "UP" | "DOWN") => {
+  const handleMove = async (
+    list: TopicWithAssessment[],
+    index: number,
+    direction: "UP" | "DOWN"
+  ) => {
     if (direction === "UP" && index === 0) return;
-    if (direction === "DOWN" && index === topics.length - 1) return;
+    if (direction === "DOWN" && index === list.length - 1) return;
 
     const targetIndex = direction === "UP" ? index - 1 : index + 1;
-    const current = topics[index];
-    const target = topics[targetIndex];
+    const current = list[index];
+    const target = list[targetIndex];
 
     const reordered = [
       { id: current.id, orderIndex: target.orderIndex },
@@ -174,7 +211,7 @@ export function SubjectTopicsTab({
   };
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Deseja excluir o conteúdo "${title}"?`)) return;
+    if (!confirm(`Deseja excluir "${title}" e seus subitens?`)) return;
     try {
       const res = await deleteTopicAction(id, subjectId);
       if (res.success) {
@@ -186,6 +223,42 @@ export function SubjectTopicsTab({
     } catch {
       toast("Erro ao remover conteúdo.", "error");
     }
+  };
+
+  // Upload and open PDF in in-app reader
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const objectUrl = URL.createObjectURL(file);
+
+      // Save material to database
+      try {
+        await createMaterialAction({
+          subjectId,
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          fileName: file.name,
+          fileType: "PDF",
+          fileUrl: objectUrl,
+          fileSize: file.size,
+        });
+      } catch {
+        // Silently continue to open viewer
+      }
+
+      // Open in built-in reader
+      setActivePdfUrl(objectUrl);
+      setActivePdfTitle(file.name.replace(/\.[^/.]+$/, ""));
+      setActivePdfFileName(file.name);
+      setPdfViewerOpen(true);
+      router.refresh();
+    }
+  };
+
+  const handleOpenExistingPdf = (material: SubjectMaterialItem) => {
+    setActivePdfUrl(material.fileUrl);
+    setActivePdfTitle(material.title);
+    setActivePdfFileName(material.fileName);
+    setPdfViewerOpen(true);
   };
 
   return (
@@ -203,10 +276,9 @@ export function SubjectTopicsTab({
               {progress.progressPercentage}%
             </span>
             <span className="text-xs text-neutral-400">
-              ({progress.completedCount}/{progress.total} tópicos dominados)
+              ({progress.completedCount}/{progress.total} dominados)
             </span>
           </div>
-          {/* Progress Bar */}
           <div className="w-full bg-neutral-950 h-2 rounded-full overflow-hidden mt-3 border border-neutral-850">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all duration-300"
@@ -227,8 +299,6 @@ export function SubjectTopicsTab({
             </span>
             <span className="text-xs text-neutral-400">/ 4.0 ({mastery.masteryScore}%)</span>
           </div>
-
-          {/* Mini Distribution Bar */}
           <div className="flex gap-1 mt-3">
             {MASTERY_LEVELS.map((lvl) => {
               const count = distribution[lvl.level] || 0;
@@ -236,7 +306,7 @@ export function SubjectTopicsTab({
                 <div
                   key={lvl.level}
                   className={`flex-1 text-center py-0.5 rounded text-[10px] font-mono border ${lvl.color}`}
-                  title={`${lvl.label}: ${count} tópico(s)`}
+                  title={`${lvl.label}: ${count} item(s)`}
                 >
                   {count}
                 </div>
@@ -265,18 +335,44 @@ export function SubjectTopicsTab({
         </Card>
       </div>
 
-      {/* Header and Actions */}
+      {/* Action Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
         <div>
-          <h3 className="text-sm font-semibold text-neutral-100">
-            Tópicos & Ementa da Disciplina ({topics.length})
+          <h3 className="text-sm font-semibold text-neutral-100 flex items-center gap-2">
+            <Layers className="h-4 w-4 text-purple-400" />
+            Ementa & Conteúdos da Disciplina ({topics.length})
           </h3>
           <p className="text-xs text-neutral-400">
-            Acompanhe o nível de domínio (0 a 4) de cada conteúdo e organize suas revisões.
+            Organize módulos e subconteúdos específicos e consulte os slides e PDFs da aula no leitor integrado.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* PDF In-App Reader Button */}
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handlePdfUpload}
+            className="hidden"
+          />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (materials.length > 0) {
+                handleOpenExistingPdf(materials[0]);
+              } else {
+                pdfInputRef.current?.click();
+              }
+            }}
+            className="text-xs border-purple-800/60 bg-purple-950/20 text-purple-300 hover:bg-purple-950/40"
+          >
+            <Eye className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
+            {materials.length > 0 ? `Ver Slides / PDF (${materials.length})` : "Abrir PDF da Aula"}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -291,80 +387,18 @@ export function SubjectTopicsTab({
             size="sm"
             onClick={() => {
               setEditingTopic(null);
+              setTargetParentId(null);
               setTopicModalOpen(true);
             }}
             className="text-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
-            Novo Conteúdo
+            Novo Tópico
           </Button>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      {topics.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg bg-neutral-950/60 border border-neutral-850 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-neutral-400 font-medium flex items-center gap-1">
-              <Filter className="h-3.5 w-3.5 text-neutral-500" />
-              Filtro:
-            </span>
-            <div className="flex rounded-md bg-neutral-900 border border-neutral-800 p-0.5">
-              <button
-                onClick={() => setStatusFilter("ALL")}
-                className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-                  statusFilter === "ALL"
-                    ? "bg-neutral-800 text-white font-medium"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                Todos ({topics.length})
-              </button>
-              <button
-                onClick={() => setStatusFilter("PENDING")}
-                className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-                  statusFilter === "PENDING"
-                    ? "bg-neutral-800 text-white font-medium"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                Pendentes ({progress.total - progress.completedCount})
-              </button>
-              <button
-                onClick={() => setStatusFilter("COMPLETED")}
-                className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-                  statusFilter === "COMPLETED"
-                    ? "bg-neutral-800 text-white font-medium"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                Dominados ({progress.completedCount})
-              </button>
-            </div>
-          </div>
-
-          {assessments.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-neutral-400 text-[11px]">Prova:</span>
-              <select
-                value={assessmentFilter}
-                onChange={(e) => setAssessmentFilter(e.target.value)}
-                className="h-7 text-xs bg-neutral-900 border border-neutral-800 rounded px-2 text-neutral-200"
-              >
-                <option value="ALL">Todas as Avaliações</option>
-                <option value="NONE">Sem Avaliação Vinculada</option>
-                {assessments.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Topics List */}
+      {/* Topic Tree List */}
       {topics.length === 0 ? (
         <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-3">
           <FileText className="h-8 w-8 text-neutral-500 mx-auto" />
@@ -372,7 +406,7 @@ export function SubjectTopicsTab({
             Nenhum conteúdo cadastrado
           </h4>
           <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-            Cadastre os tópicos da matéria para acompanhar o que já estudou e o nível de domínio em cada assunto.
+            Arraste o arquivo PDF da disciplina para extrair os tópicos automaticamente ou crie módulos e subconteúdos manualmente.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <Button
@@ -387,159 +421,309 @@ export function SubjectTopicsTab({
               size="sm"
               onClick={() => {
                 setEditingTopic(null);
+                setTargetParentId(null);
                 setTopicModalOpen(true);
               }}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
-              Adicionar Tópico
+              Adicionar Módulo / Tópico
             </Button>
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredTopics.map((topic, index) => {
-            const isCompleted =
-              topic.status === "COMPLETED" || topic.masteryLevel === 4;
+        <div className="space-y-3">
+          {topicTree.map((parent, pIndex) => {
+            const hasSubtopics = parent.subtopics && parent.subtopics.length > 0;
+            const isExpanded = expandedParents[parent.id] ?? true;
+            const isParentCompleted =
+              parent.status === "COMPLETED" || parent.masteryLevel === 4;
 
             return (
               <div
-                key={topic.id}
-                className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border transition-colors ${
-                  isCompleted
-                    ? "bg-emerald-950/10 border-emerald-900/30"
-                    : topic.masteryLevel > 0
-                    ? "bg-neutral-900/40 border-neutral-800"
-                    : "bg-neutral-950/60 border-neutral-850"
-                }`}
+                key={parent.id}
+                className="rounded-xl border border-neutral-800 bg-neutral-950/60 overflow-hidden shadow-sm"
               >
-                {/* Left: Checkbox + Title + Metadata */}
-                <div className="flex items-start gap-3">
-                  {/* Complete Checkbox */}
-                  <button
-                    onClick={() => handleToggleComplete(topic)}
-                    className="mt-0.5 text-neutral-500 hover:text-emerald-400 transition-colors shrink-0"
-                    title={isCompleted ? "Desmarcar conclusão" : "Marcar como dominado"}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-neutral-600 hover:text-neutral-400" />
-                    )}
-                  </button>
-
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`text-sm font-medium ${
-                          isCompleted
-                            ? "text-neutral-300 line-through decoration-neutral-600"
-                            : "text-neutral-100"
-                        }`}
+                {/* Parent Module Header */}
+                <div
+                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-3.5 transition-colors ${
+                    hasSubtopics
+                      ? "bg-neutral-900/60 hover:bg-neutral-900/90 cursor-pointer"
+                      : isParentCompleted
+                      ? "bg-emerald-950/10"
+                      : "bg-neutral-900/30"
+                  }`}
+                  onClick={() => hasSubtopics && toggleExpand(parent.id)}
+                >
+                  {/* Left: Expand Chevron + Checkbox + Title */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {hasSubtopics ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpand(parent.id);
+                        }}
+                        className="p-1 text-neutral-400 hover:text-white shrink-0"
                       >
-                        {topic.title}
-                      </span>
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleComplete(parent);
+                        }}
+                        className="p-1 text-neutral-500 hover:text-emerald-400 shrink-0"
+                      >
+                        {isParentCompleted ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-neutral-600" />
+                        )}
+                      </button>
+                    )}
 
-                      {topic.assessmentTitle && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] font-mono text-blue-400 border-blue-800"
-                        >
-                          <Award className="h-3 w-3 mr-1" />
-                          {topic.assessmentTitle}
-                        </Badge>
-                      )}
-
-                      {topic.importance >= 4 && (
-                        <span
-                          className="flex items-center text-amber-400 text-[10px] font-mono"
-                          title={`Importância: ${topic.importance}/5`}
-                        >
-                          <Flame className="h-3 w-3 mr-0.5 fill-amber-400" />
-                          Alta
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-neutral-100">
+                          {parent.title}
                         </span>
-                      )}
 
-                      {topic.estimatedHours && topic.estimatedHours > 0 && (
-                        <span className="text-[10px] text-neutral-500 font-mono">
-                          • {topic.estimatedHours}h
-                        </span>
+                        {hasSubtopics && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-neutral-900 text-neutral-300 border-neutral-800 text-[10px] font-mono px-1.5 py-0"
+                          >
+                            {parent.subtopics.length} subconteúdo(s)
+                          </Badge>
+                        )}
+
+                        {parent.assessmentTitle && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] font-mono text-blue-400 border-blue-800"
+                          >
+                            <Award className="h-3 w-3 mr-1" />
+                            {parent.assessmentTitle}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {parent.description && (
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          {parent.description}
+                        </p>
                       )}
                     </div>
+                  </div>
 
-                    {topic.description && (
-                      <p className="text-xs text-neutral-400 mt-0.5">
-                        {topic.description}
-                      </p>
+                  {/* Right: Actions and Mastery */}
+                  <div
+                    className="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Add Subtopic Button */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingTopic(null);
+                        setTargetParentId(parent.id);
+                        setTopicModalOpen(true);
+                      }}
+                      className="h-7 text-xs px-2 text-purple-300 hover:text-purple-200 hover:bg-purple-950/30"
+                      title="Adicionar subconteúdo a este módulo"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Subtópico
+                    </Button>
+
+                    {/* Mastery Level (only for leaf parents without subtopics) */}
+                    {!hasSubtopics && (
+                      <div className="flex items-center gap-1">
+                        {MASTERY_LEVELS.map((lvl) => {
+                          const isSelected = parent.masteryLevel === lvl.level;
+                          return (
+                            <button
+                              key={lvl.level}
+                              onClick={() => handleMasteryChange(parent.id, lvl.level)}
+                              className={`h-6 w-6 rounded text-xs font-mono font-bold transition-all ${
+                                isSelected
+                                  ? `${lvl.color} ring-1 ring-white/20 scale-105`
+                                  : "bg-neutral-950 text-neutral-600 hover:text-neutral-300 border border-neutral-850"
+                              }`}
+                              title={`${lvl.level} — ${lvl.label}`}
+                            >
+                              {lvl.level}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
+
+                    {/* Reorder and Edit */}
+                    <div className="flex items-center gap-1 text-neutral-500">
+                      <button
+                        onClick={() => handleMove(topicTree, pIndex, "UP")}
+                        disabled={pIndex === 0}
+                        className="p-1 hover:text-neutral-200 disabled:opacity-30"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleMove(topicTree, pIndex, "DOWN")}
+                        disabled={pIndex === topicTree.length - 1}
+                        className="p-1 hover:text-neutral-200 disabled:opacity-30"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingTopic(parent);
+                          setTopicModalOpen(true);
+                        }}
+                        className="p-1 hover:text-neutral-200"
+                        title="Editar Módulo"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(parent.id, parent.title)}
+                        className="p-1 hover:text-red-400"
+                        title="Excluir Módulo"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Right: Mastery Level Selector & Actions */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-neutral-850">
-                  {/* Mastery Pill Selector 0 to 4 */}
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-neutral-400 mr-1 hidden sm:inline">
-                      Domínio:
-                    </span>
-                    {MASTERY_LEVELS.map((lvl) => {
-                      const isSelected = topic.masteryLevel === lvl.level;
+                {/* Subtopics Children List */}
+                {hasSubtopics && isExpanded && (
+                  <div className="divide-y divide-neutral-900 bg-neutral-950/90 pl-6 sm:pl-8 pr-3 py-1 border-t border-neutral-850/60">
+                    {parent.subtopics.map((sub, sIndex) => {
+                      const isSubCompleted =
+                        sub.status === "COMPLETED" || sub.masteryLevel === 4;
 
                       return (
-                        <button
-                          key={lvl.level}
-                          onClick={() => handleMasteryChange(topic.id, lvl.level)}
-                          className={`h-6 w-6 rounded text-xs font-mono font-bold transition-all ${
-                            isSelected
-                              ? `${lvl.color} ring-1 ring-white/20 scale-105`
-                              : "bg-neutral-950 text-neutral-600 hover:text-neutral-300 border border-neutral-850"
-                          }`}
-                          title={`${lvl.level} — ${lvl.label}`}
+                        <div
+                          key={sub.id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2.5 pr-1 transition-colors hover:bg-neutral-900/30 rounded"
                         >
-                          {lvl.level}
-                        </button>
+                          {/* Subtopic Title and Checkbox */}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-neutral-600 text-xs font-mono select-none">
+                              ↳
+                            </span>
+
+                            <button
+                              onClick={() => handleToggleComplete(sub as any)}
+                              className="p-0.5 text-neutral-500 hover:text-emerald-400 shrink-0"
+                            >
+                              {isSubCompleted ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                              ) : (
+                                <Circle className="h-4 w-4 text-neutral-600" />
+                              )}
+                            </button>
+
+                            <div className="min-w-0">
+                              <span
+                                className={`text-xs font-medium ${
+                                  isSubCompleted
+                                    ? "text-neutral-400 line-through decoration-neutral-600"
+                                    : "text-neutral-200"
+                                }`}
+                              >
+                                {sub.title}
+                              </span>
+
+                              {sub.assessmentTitle && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[9px] font-mono text-blue-400 border-blue-800"
+                                >
+                                  {sub.assessmentTitle}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Subtopic Mastery & Actions */}
+                          <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pl-6 sm:pl-0">
+                            {/* Mastery 0 to 4 */}
+                            <div className="flex items-center gap-1">
+                              {MASTERY_LEVELS.map((lvl) => {
+                                const isSelected = sub.masteryLevel === lvl.level;
+                                return (
+                                  <button
+                                    key={lvl.level}
+                                    onClick={() => handleMasteryChange(sub.id, lvl.level)}
+                                    className={`h-5 w-5 rounded text-[10px] font-mono font-bold transition-all ${
+                                      isSelected
+                                        ? `${lvl.color} ring-1 ring-white/20 scale-105`
+                                        : "bg-neutral-950 text-neutral-600 hover:text-neutral-300 border border-neutral-850"
+                                    }`}
+                                    title={`${lvl.level} — ${lvl.label}`}
+                                  >
+                                    {lvl.level}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Subtopic Actions */}
+                            <div className="flex items-center gap-1 text-neutral-500">
+                              <button
+                                onClick={() =>
+                                  handleMove(parent.subtopics as any, sIndex, "UP")
+                                }
+                                disabled={sIndex === 0}
+                                className="p-1 hover:text-neutral-200 disabled:opacity-30"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleMove(
+                                    parent.subtopics as any,
+                                    sIndex,
+                                    "DOWN"
+                                  )
+                                }
+                                disabled={sIndex === parent.subtopics.length - 1}
+                                className="p-1 hover:text-neutral-200 disabled:opacity-30"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingTopic(sub as any);
+                                  setTopicModalOpen(true);
+                                }}
+                                className="p-1 hover:text-neutral-200"
+                                title="Editar Subtópico"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(sub.id, sub.title)}
+                                className="p-1 hover:text-red-400"
+                                title="Excluir Subtópico"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
-
-                  {/* Reorder and Edit Actions */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleMove(index, "UP")}
-                      disabled={index === 0}
-                      className="p-1 text-neutral-500 hover:text-neutral-200 disabled:opacity-30"
-                      title="Mover para cima"
-                    >
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleMove(index, "DOWN")}
-                      disabled={index === topics.length - 1}
-                      className="p-1 text-neutral-500 hover:text-neutral-200 disabled:opacity-30"
-                      title="Mover para baixo"
-                    >
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setEditingTopic(topic);
-                        setTopicModalOpen(true);
-                      }}
-                      className="p-1 text-neutral-500 hover:text-neutral-200"
-                      title="Editar"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDelete(topic.id, topic.title)}
-                      className="p-1 text-neutral-500 hover:text-red-400"
-                      title="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             );
           })}
@@ -552,6 +736,8 @@ export function SubjectTopicsTab({
         onOpenChange={setTopicModalOpen}
         subjectId={subjectId}
         assessments={assessments}
+        parentTopics={parentOptions}
+        defaultParentId={targetParentId}
         topicToEdit={editingTopic}
         onSuccess={() => router.refresh()}
       />
@@ -564,6 +750,14 @@ export function SubjectTopicsTab({
         subjectCode={subjectCode}
         assessments={assessments}
         onSuccess={() => router.refresh()}
+      />
+
+      <PdfViewerModal
+        open={pdfViewerOpen}
+        onOpenChange={setPdfViewerOpen}
+        title={activePdfTitle}
+        pdfUrl={activePdfUrl}
+        fileName={activePdfFileName}
       />
     </div>
   );

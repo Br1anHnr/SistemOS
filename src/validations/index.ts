@@ -1,147 +1,160 @@
 import { z } from "zod";
 
-// ─── Semester ───────────────────────────────────────────────────────────────
+// ─── Semester ────────────────────────────────────────────────────────────────
 
-export const semesterStatusSchema = z.enum(
-  ["PLANNED", "ACTIVE", "COMPLETED", "ARCHIVED"],
+export const semesterStatusSchema = z.enum(["ACTIVE", "COMPLETED", "ARCHIVED"], {
+  errorMap: () => ({ message: "Status de semestre inválido." }),
+});
+
+export const semesterBaseSchema = z.object({
+  name: z
+    .string({ required_error: "O nome do semestre é obrigatório." })
+    .min(1, "O nome do semestre não pode ser vazio.")
+    .max(100, "O nome deve ter no máximo 100 caracteres."),
+  academicYear: z
+    .string({ required_error: "O ano letivo é obrigatório." })
+    .regex(/^\d{4}$/, "O ano letivo deve ter 4 dígitos (ex: 2026)."),
+  academicTerm: z
+    .string({ required_error: "O período letivo é obrigatório." })
+    .min(1, "O período letivo não pode ser vazio.")
+    .max(50, "O período deve ter no máximo 50 caracteres."),
+  startDate: z
+    .string({ required_error: "A data de início é obrigatória." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (YYYY-MM-DD)."),
+  endDate: z
+    .string({ required_error: "A data de término é obrigatória." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (YYYY-MM-DD)."),
+  status: semesterStatusSchema.default("ACTIVE"),
+  isCurrent: z.boolean().default(false),
+});
+
+export const createSemesterSchema = semesterBaseSchema.refine(
+  (data) => {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    return end > start;
+  },
   {
-    errorMap: () => ({ message: "Selecione um status válido para o semestre." }),
+    message: "A data final deve ser posterior à data inicial.",
+    path: ["endDate"],
   }
 );
 
-export const createSemesterSchema = z
-  .object({
-    name: z
-      .string({ required_error: "Informe o nome do semestre." })
-      .min(1, "Informe o nome do semestre.")
-      .max(100, "O nome do semestre deve ter no máximo 100 caracteres."),
-    academicYear: z
-      .string({ required_error: "Informe o ano acadêmico." })
-      .min(1, "Informe o ano acadêmico (ex: 2026).")
-      .max(10, "Ano acadêmico inválido."),
-    academicTerm: z
-      .string({ required_error: "Informe o período letivo." })
-      .min(1, "Informe o período letivo (ex: 1º Semestre).")
-      .max(20, "Período inválido."),
-    startDate: z
-      .string({ required_error: "Informe a data de início." })
-      .min(1, "Informe a data de início."),
-    endDate: z
-      .string({ required_error: "Informe a data de término." })
-      .min(1, "Informe a data de término."),
-    status: semesterStatusSchema.default("PLANNED"),
-  })
-  .refine((data) => data.endDate > data.startDate, {
-    message: "A data final deve ser posterior à data inicial.",
-    path: ["endDate"],
-  });
+export const updateSemesterSchema = semesterBaseSchema.partial();
 
-export const updateSemesterSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1, "Informe o nome do semestre.")
-      .max(100, "O nome do semestre deve ter no máximo 100 caracteres.")
-      .optional(),
-    academicYear: z.string().min(1, "Informe o ano acadêmico.").max(10).optional(),
-    academicTerm: z.string().min(1, "Informe o período letivo.").max(20).optional(),
-    startDate: z.string().min(1, "Informe a data de início.").optional(),
-    endDate: z.string().min(1, "Informe a data de término.").optional(),
-    status: semesterStatusSchema.optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.startDate && data.endDate) {
-        return data.endDate > data.startDate;
-      }
-      return true;
-    },
-    {
-      message: "A data final deve ser posterior à data inicial.",
-      path: ["endDate"],
-    }
-  );
-
-// ─── Subject ────────────────────────────────────────────────────────────────
+// ─── Subject ─────────────────────────────────────────────────────────────────
 
 export const subjectStatusSchema = z.enum(
   ["ACTIVE", "COMPLETED", "FAILED", "DROPPED", "ARCHIVED"],
   {
-    errorMap: () => ({ message: "Selecione um status válido para a disciplina." }),
+    errorMap: () => ({ message: "Status de disciplina inválido." }),
   }
 );
 
 export const createSubjectSchema = z.object({
-  semesterId: z.string({ required_error: "Semestre é obrigatório." }).uuid("ID de semestre inválido."),
+  semesterId: z
+    .string({ required_error: "O semestre é obrigatório." })
+    .uuid("ID de semestre inválido."),
   name: z
-    .string({ required_error: "Informe o nome da disciplina." })
-    .min(1, "Informe o nome da disciplina.")
-    .max(200, "O nome da disciplina deve ter no máximo 200 caracteres."),
-  code: z.string().max(30, "Código deve ter no máximo 30 caracteres.").optional().or(z.literal("")),
-  professor: z.string().max(200, "Nome do professor deve ter no máximo 200 caracteres.").optional().or(z.literal("")),
-  room: z.string().max(50, "Sala deve ter no máximo 50 caracteres.").optional().or(z.literal("")),
+    .string({ required_error: "O nome da disciplina é obrigatório." })
+    .min(1, "O nome não pode ser vazio.")
+    .max(150, "O nome deve ter no máximo 150 caracteres."),
+  code: z
+    .string()
+    .max(30, "O código deve ter no máximo 30 caracteres.")
+    .optional()
+    .nullable(),
+  professor: z
+    .string()
+    .max(150, "O nome do professor deve ter no máximo 150 caracteres.")
+    .optional()
+    .nullable(),
+  room: z
+    .string()
+    .max(50, "A sala/local deve ter no máximo 50 caracteres.")
+    .optional()
+    .nullable(),
   workloadHours: z
-    .number({ invalid_type_error: "Carga horária deve ser um número." })
-    .int("Carga horária deve ser um número inteiro.")
-    .positive("Carga horária deve ser maior que zero.")
+    .number({ invalid_type_error: "A carga horária deve ser um número." })
+    .positive("A carga horária deve ser maior que zero.")
+    .int("A carga horária deve ser um número inteiro.")
     .optional()
     .nullable(),
   minimumAttendancePercentage: z
-    .number({ invalid_type_error: "Frequência mínima deve ser um número." })
+    .number({ invalid_type_error: "A frequência mínima deve ser um número." })
     .min(0, "A frequência mínima não pode ser menor que 0%.")
-    .max(100, "A frequência mínima não pode ser maior que 100%.")
+    .max(100, "A frequência mínima não pode exceder 100%.")
     .default(75),
   personalDifficulty: z
-    .number({ invalid_type_error: "Dificuldade deve ser um número." })
-    .int()
-    .min(1, "Dificuldade mínima é 1.")
-    .max(5, "Dificuldade máxima é 5.")
+    .number({ invalid_type_error: "A dificuldade pessoal deve ser um número." })
+    .int("A dificuldade deve ser um número inteiro.")
+    .min(1, "A dificuldade mínima é 1.")
+    .max(5, "A dificuldade máxima é 5.")
     .default(3),
-  color: z.string().max(9).optional().or(z.literal("")),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "A cor deve ser um hexadecimal válido (ex: #3B82F6).")
+    .optional()
+    .nullable(),
   status: subjectStatusSchema.default("ACTIVE"),
 });
 
-export const updateSubjectSchema = createSubjectSchema.partial().extend({
-  id: z.string().uuid().optional(),
+export const updateSubjectSchema = createSubjectSchema.partial();
+
+// ─── Subject Schedules ───────────────────────────────────────────────────────
+
+export const subjectScheduleBaseSchema = z.object({
+  subjectId: z
+    .string({ required_error: "A disciplina é obrigatória." })
+    .uuid("ID de disciplina inválido."),
+  dayOfWeek: z
+    .number({ required_error: "O dia da semana é obrigatório." })
+    .int()
+    .min(0, "Dia da semana inválido (0 = Domingo, 6 = Sábado).")
+    .max(6, "Dia da semana inválido (0 = Domingo, 6 = Sábado)."),
+  startTime: z
+    .string({ required_error: "O horário de início é obrigatório." })
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora inválido (HH:MM)."),
+  endTime: z
+    .string({ required_error: "O horário de término é obrigatório." })
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora inválido (HH:MM)."),
+  room: z
+    .string()
+    .max(50, "A sala deve ter no máximo 50 caracteres.")
+    .optional()
+    .nullable(),
 });
 
-// ─── SubjectSchedule ────────────────────────────────────────────────────────
-
-export const createSubjectScheduleSchema = z
-  .object({
-    subjectId: z.string().uuid("ID de disciplina inválido."),
-    dayOfWeek: z
-      .number({ required_error: "Selecione o dia da semana." })
-      .int()
-      .min(0, "Dia da semana inválido.")
-      .max(6, "Dia da semana inválido."),
-    startTime: z
-      .string({ required_error: "Informe o horário inicial." })
-      .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Horário inicial inválido (use HH:MM)."),
-    endTime: z
-      .string({ required_error: "Informe o horário final." })
-      .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Horário final inválido (use HH:MM)."),
-    room: z.string().max(50, "Sala deve ter no máximo 50 caracteres.").optional().or(z.literal("")),
-  })
-  .refine((data) => data.endTime > data.startTime, {
+export const createSubjectScheduleSchema = subjectScheduleBaseSchema.refine(
+  (data) => {
+    const [startH, startM] = data.startTime.split(":").map(Number);
+    const [endH, endM] = data.endTime.split(":").map(Number);
+    const startMin = startH * 60 + startM;
+    const endMin = endH * 60 + endM;
+    return endMin > startMin;
+  },
+  {
     message: "O horário final deve ser posterior ao horário inicial.",
     path: ["endTime"],
-  });
+  }
+);
 
-// ─── GradingScheme & Components ─────────────────────────────────────────────
+export const updateSubjectScheduleSchema = subjectScheduleBaseSchema.partial();
+
+// ─── Grading Scheme & Components ─────────────────────────────────────────────
 
 export const roundingModeSchema = z.enum(
-  ["ROUND_HALF_UP", "ROUND_DOWN", "ROUND_UP", "NONE"],
+  ["NONE", "ROUND_HALF_UP", "CEIL", "FLOOR"],
   {
     errorMap: () => ({ message: "Modo de arredondamento inválido." }),
   }
 );
 
 export const updateGradingSchemeWithComponentsSchema = z.object({
-  schemeId: z.string().uuid(),
+  schemeId: z.string().uuid("ID de esquema inválido."),
   passingGrade: z
-    .number({ required_error: "Informe a nota mínima para aprovação." })
-    .min(0, "A média mínima não pode ser negativa.")
+    .number({ required_error: "Informe a média mínima para aprovação." })
+    .min(0, "A média não pode ser negativa.")
     .max(10, "A média mínima não pode exceder 10."),
   examEnabled: z.boolean().default(true),
   examTriggerThreshold: z
@@ -186,75 +199,93 @@ export const assessmentStatusSchema = z.enum(
 );
 
 export const createAssessmentSchema = z.object({
-  subjectId: z.string({ required_error: "Disciplina é obrigatória." }).uuid("ID de disciplina inválido."),
-  gradeComponentId: z.string().uuid("ID de componente inválido.").optional().nullable(),
+  subjectId: z
+    .string({ required_error: "Disciplina é obrigatória." })
+    .uuid("ID de disciplina inválido."),
+  componentId: z.string().uuid("ID de componente inválido.").optional().nullable(),
   title: z
-    .string({ required_error: "Informe o título da avaliação." })
-    .min(1, "Informe o título da avaliação (ex: Prova 1 - P1).")
-    .max(200, "O título deve ter no máximo 200 caracteres."),
+    .string({ required_error: "Título da avaliação é obrigatório." })
+    .min(1, "O título não pode ser vazio.")
+    .max(150, "O título deve ter no máximo 150 caracteres."),
   type: assessmentTypeSchema.default("EXAM"),
-  date: z.string().optional().nullable(),
-  maxGrade: z
-    .number({ invalid_type_error: "Nota máxima deve ser um número." })
-    .min(0, "Nota máxima não pode ser negativa.")
-    .max(100, "Nota máxima inválida.")
-    .default(10),
-  status: assessmentStatusSchema.default("SCHEDULED"),
-  notes: z.string().optional().nullable(),
-  grade: z
-    .number({ invalid_type_error: "Nota deve ser um número." })
-    .min(0, "A nota não pode ser negativa.")
-    .max(100, "A nota não pode exceder o valor máximo.")
+  date: z
+    .string({ required_error: "Data da avaliação é obrigatória." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (YYYY-MM-DD)."),
+  weight: z
+    .number({ invalid_type_error: "O peso deve ser um número." })
+    .positive("O peso deve ser maior que zero.")
     .optional()
     .nullable(),
+  maxGrade: z
+    .number({ invalid_type_error: "A nota máxima deve ser um número." })
+    .positive("A nota máxima deve ser maior que zero.")
+    .default(10),
+  status: assessmentStatusSchema.default("SCHEDULED"),
+  grade: z
+    .number({ invalid_type_error: "A nota deve ser um número." })
+    .min(0, "A nota não pode ser negativa.")
+    .max(10, "A nota não pode ser maior que 10.")
+    .optional()
+    .nullable(),
+  feedback: z.string().optional().nullable(),
 });
 
 export const updateAssessmentSchema = createAssessmentSchema.partial();
 
 export const saveGradeSchema = z.object({
-  assessmentId: z.string().uuid("ID de avaliação inválido."),
+  assessmentId: z
+    .string({ required_error: "Avaliação é obrigatória." })
+    .uuid("ID de avaliação inválido."),
   grade: z
     .number({ required_error: "Informe a nota obtida." })
     .min(0, "A nota não pode ser negativa.")
-    .max(100, "A nota não pode exceder 100."),
-  notes: z.string().optional().nullable(),
+    .max(10, "A nota máxima é 10."),
+  feedback: z.string().optional().nullable(),
 });
 
-// ─── ClassSession & Attendance ──────────────────────────────────────────────
+// ─── Attendance & Class Sessions ────────────────────────────────────────────
 
-export const classSessionStatusSchema = z.enum(
-  ["SCHEDULED", "HELD", "CANCELED"],
-  {
-    errorMap: () => ({ message: "Status de aula inválido." }),
-  }
-);
+export const classSessionStatusSchema = z.enum(["SCHEDULED", "HELD", "CANCELED"], {
+  errorMap: () => ({ message: "Status de aula inválido." }),
+});
 
 export const attendanceStatusSchema = z.enum(
-  ["PRESENT", "ABSENT", "PARTIAL", "EXCUSED", "NOT_RECORDED"],
+  ["PRESENT", "ABSENT", "EXCUSED", "PARTIAL", "NOT_RECORDED"],
   {
     errorMap: () => ({ message: "Status de presença inválido." }),
   }
 );
 
 export const createClassSessionSchema = z.object({
-  subjectId: z.string().uuid("ID de disciplina inválido."),
+  subjectId: z
+    .string({ required_error: "Disciplina é obrigatória." })
+    .uuid("ID de disciplina inválido."),
   scheduleId: z.string().uuid("ID de horário inválido.").optional().nullable(),
-  date: z.string({ required_error: "Informe a data da aula." }).min(1, "Informe a data da aula."),
-  startTime: z.string().optional().nullable(),
-  endTime: z.string().optional().nullable(),
+  date: z
+    .string({ required_error: "Data da aula é obrigatória." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (YYYY-MM-DD)."),
+  startTime: z
+    .string({ required_error: "Horário inicial é obrigatório." })
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora inválido (HH:MM)."),
+  endTime: z
+    .string({ required_error: "Horário final é obrigatório." })
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Formato de hora inválido (HH:MM)."),
   absenceUnits: z
-    .number({ invalid_type_error: "Unidades de ausência deve ser um número." })
-    .int("Unidades de ausência deve ser um número inteiro.")
-    .min(1, "A aula deve valer pelo menos 1 unidade.")
+    .number({ required_error: "Unidades de ausência são obrigatórias." })
+    .int()
+    .positive("As unidades de ausência devem ser no mínimo 1.")
     .default(1),
+  topic: z.string().max(200).optional().nullable(),
   status: classSessionStatusSchema.default("SCHEDULED"),
 });
 
 export const recordAttendanceSchema = z.object({
-  classSessionId: z.string().uuid("ID de aula inválido."),
+  classSessionId: z
+    .string({ required_error: "Sessão de aula é obrigatória." })
+    .uuid("ID de aula inválido."),
   status: attendanceStatusSchema,
   absentUnits: z
-    .number({ required_error: "Informe as unidades de falta." })
+    .number({ invalid_type_error: "Unidades de falta devem ser um número." })
     .int()
     .min(0, "Unidades de falta não podem ser negativas.")
     .default(0),
@@ -272,6 +303,7 @@ export const topicStatusSchema = z.enum(
 
 export const createTopicSchema = z.object({
   subjectId: z.string({ required_error: "Disciplina é obrigatória." }).uuid("ID de disciplina inválido."),
+  parentId: z.string().uuid("ID do tópico pai inválido.").optional().nullable(),
   title: z
     .string({ required_error: "Informe o título do conteúdo." })
     .min(1, "Informe o título do conteúdo.")
@@ -312,8 +344,25 @@ export const updateTopicMasterySchema = z.object({
 
 export const batchCreateTopicsSchema = z.object({
   subjectId: z.string().uuid("ID de disciplina inválido."),
+  parentId: z.string().uuid().optional().nullable(),
   rawText: z
     .string({ required_error: "Insira a lista de tópicos." })
     .min(1, "Insira pelo menos um tópico."),
   assessmentId: z.string().uuid().optional().nullable(),
+});
+
+// ─── Subject Materials ──────────────────────────────────────────────────────
+
+export const createMaterialSchema = z.object({
+  subjectId: z.string().uuid("ID de disciplina inválido."),
+  topicId: z.string().uuid("ID de tópico inválido.").optional().nullable(),
+  title: z
+    .string({ required_error: "Título do material é obrigatório." })
+    .min(1, "Título do material não pode ser vazio.")
+    .max(200, "O título deve ter no máximo 200 caracteres."),
+  fileName: z.string().min(1, "Nome do arquivo é obrigatório."),
+  fileType: z.string().default("PDF"),
+  fileUrl: z.string().min(1, "URL ou dados do arquivo são obrigatórios."),
+  fileSize: z.number().int().optional().nullable(),
+  pageCount: z.number().int().optional().nullable(),
 });

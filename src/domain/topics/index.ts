@@ -1,11 +1,17 @@
 export interface TopicItem {
   id: string;
+  parentId?: string | null;
   title: string;
+  description?: string | null;
+  orderIndex: number;
   status: "NOT_STARTED" | "IN_PROGRESS" | "REVIEWED" | "COMPLETED" | "ARCHIVED";
   masteryLevel: number; // 0 to 4
   importance: number; // 1 to 5
   estimatedHours?: number | null;
   assessmentId?: string | null;
+  assessmentTitle?: string | null;
+  completedAt?: Date | string | null;
+  subtopics?: TopicItem[];
 }
 
 export const MASTERY_LEVELS = [
@@ -16,8 +22,52 @@ export const MASTERY_LEVELS = [
   { level: 4, label: "Dominado / Revisado", shortLabel: "4", color: "text-emerald-400 bg-emerald-950/40 border-emerald-800/60" },
 ] as const;
 
+/**
+ * Organizes flat topics array into a hierarchical tree (Parents -> Subtopics).
+ */
+export function buildTopicTree<T extends TopicItem>(topics: T[]): Array<T & { subtopics: T[] }> {
+  const parents: Array<T & { subtopics: T[] }> = [];
+  const subtopicMap = new Map<string, T[]>();
+
+  // Sort by orderIndex
+  const sorted = [...topics].sort((a, b) => a.orderIndex - b.orderIndex);
+
+  for (const t of sorted) {
+    if (t.parentId) {
+      const list = subtopicMap.get(t.parentId) || [];
+      list.push(t);
+      subtopicMap.set(t.parentId, list);
+    }
+  }
+
+  for (const t of sorted) {
+    if (!t.parentId) {
+      parents.push({
+        ...t,
+        subtopics: subtopicMap.get(t.id) || [],
+      });
+    }
+  }
+
+  return parents;
+}
+
+/**
+ * Gets effective topics to calculate metrics:
+ * If a parent has subtopics, its subtopics are evaluated. If it has no subtopics, the parent itself is evaluated.
+ */
+export function getEffectiveLeafTopics(topics: TopicItem[]): TopicItem[] {
+  const parentIdsWithChildren = new Set(
+    topics.filter((t) => Boolean(t.parentId)).map((t) => t.parentId as string)
+  );
+
+  return topics.filter(
+    (t) => t.status !== "ARCHIVED" && (!parentIdsWithChildren.has(t.id) || Boolean(t.parentId))
+  );
+}
+
 export function calculateTopicProgress(topics: TopicItem[]) {
-  const active = topics.filter((t) => t.status !== "ARCHIVED");
+  const active = getEffectiveLeafTopics(topics);
   if (active.length === 0) {
     return {
       total: 0,
@@ -54,7 +104,7 @@ export function calculateTopicProgress(topics: TopicItem[]) {
 }
 
 export function calculateMasteryAverage(topics: TopicItem[]) {
-  const active = topics.filter((t) => t.status !== "ARCHIVED");
+  const active = getEffectiveLeafTopics(topics);
   if (active.length === 0) {
     return {
       averageLevel: 0,
@@ -73,7 +123,7 @@ export function calculateMasteryAverage(topics: TopicItem[]) {
 }
 
 export function calculateMasteryDistribution(topics: TopicItem[]) {
-  const active = topics.filter((t) => t.status !== "ARCHIVED");
+  const active = getEffectiveLeafTopics(topics);
   const distribution: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
 
   for (const t of active) {
@@ -85,8 +135,8 @@ export function calculateMasteryDistribution(topics: TopicItem[]) {
 }
 
 export function calculateEstimatedRemainingStudyHours(topics: TopicItem[]) {
-  const pending = topics.filter(
-    (t) => t.status !== "ARCHIVED" && t.status !== "COMPLETED" && t.masteryLevel < 4
+  const pending = getEffectiveLeafTopics(topics).filter(
+    (t) => t.status !== "COMPLETED" && t.masteryLevel < 4
   );
 
   return pending.reduce((sum, t) => sum + (t.estimatedHours || 0), 0);

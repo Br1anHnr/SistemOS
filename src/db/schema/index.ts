@@ -19,3 +19,4 @@ export {
   attendanceStatusEnum,
 } from "./attendance";
 export { topics, topicStatusEnum } from "./topic";
+export { subjectMaterials } from "./material";

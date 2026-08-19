@@ -13,12 +13,13 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { createTopicAction, updateTopicAction } from "@/actions/topic.actions";
-import { Loader2 } from "lucide-react";
+import { Loader2, Layers } from "lucide-react";
 import { MASTERY_LEVELS } from "@/domain/topics";
 
 export interface TopicToEdit {
   id: string;
   subjectId: string;
+  parentId?: string | null;
   title: string;
   description?: string | null;
   orderIndex: number;
@@ -34,6 +35,8 @@ interface TopicModalProps {
   onOpenChange: (open: boolean) => void;
   subjectId: string;
   assessments?: Array<{ id: string; title: string }>;
+  parentTopics?: Array<{ id: string; title: string }>;
+  defaultParentId?: string | null;
   topicToEdit?: TopicToEdit | null;
   onSuccess?: () => void;
 }
@@ -43,6 +46,8 @@ export function TopicModal({
   onOpenChange,
   subjectId,
   assessments = [],
+  parentTopics = [],
+  defaultParentId = null,
   topicToEdit,
   onSuccess,
 }: TopicModalProps) {
@@ -52,6 +57,7 @@ export function TopicModal({
 
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [parentId, setParentId] = React.useState<string>("");
   const [masteryLevel, setMasteryLevel] = React.useState<number>(0);
   const [importance, setImportance] = React.useState<number>(3);
   const [estimatedHours, setEstimatedHours] = React.useState<string>("");
@@ -61,6 +67,7 @@ export function TopicModal({
     if (topicToEdit) {
       setTitle(topicToEdit.title);
       setDescription(topicToEdit.description || "");
+      setParentId(topicToEdit.parentId || "");
       setMasteryLevel(topicToEdit.masteryLevel);
       setImportance(topicToEdit.importance);
       setEstimatedHours(
@@ -70,13 +77,14 @@ export function TopicModal({
     } else {
       setTitle("");
       setDescription("");
+      setParentId(defaultParentId || "");
       setMasteryLevel(0);
       setImportance(3);
       setEstimatedHours("");
       setAssessmentId("");
     }
     setError(null);
-  }, [topicToEdit, open]);
+  }, [topicToEdit, defaultParentId, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +98,7 @@ export function TopicModal({
         const res = await updateTopicAction(topicToEdit.id, subjectId, {
           title,
           description: description || null,
+          parentId: parentId || null,
           masteryLevel: Number(masteryLevel),
           importance: Number(importance),
           estimatedHours: parsedHours,
@@ -107,6 +116,7 @@ export function TopicModal({
           subjectId,
           title,
           description: description || null,
+          parentId: parentId || null,
           masteryLevel: Number(masteryLevel),
           importance: Number(importance),
           estimatedHours: parsedHours,
@@ -118,7 +128,7 @@ export function TopicModal({
           return;
         }
 
-        toast("Conteúdo cadastrado com sucesso!");
+        toast(parentId ? "Subtópico cadastrado com sucesso!" : "Tópico cadastrado com sucesso!");
       }
 
       onOpenChange(false);
@@ -134,13 +144,20 @@ export function TopicModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <form onSubmit={handleSubmit}>
         <DialogHeader>
-          <DialogTitle>
-            {topicToEdit ? "Editar Conteúdo" : "Novo Tópico / Conteúdo"}
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-purple-400" />
+            {topicToEdit
+              ? "Editar Conteúdo"
+              : parentId || defaultParentId
+              ? "Novo Subtópico / Subconteúdo"
+              : "Novo Tópico / Módulo Principal"}
           </DialogTitle>
           <DialogDescription>
             {topicToEdit
-              ? "Modifique o tópico da ementa e seu nível de domínio."
-              : "Cadastre um tópico da matéria para planejar seus estudos."}
+              ? "Modifique o tópico ou sua subcategoria."
+              : parentId || defaultParentId
+              ? "Cadastre um subconteúdo específico dentro do módulo principal."
+              : "Cadastre um módulo ou tópico principal da disciplina."}
           </DialogDescription>
         </DialogHeader>
 
@@ -151,6 +168,28 @@ export function TopicModal({
         )}
 
         <div className="space-y-4 text-sm max-h-[60vh] overflow-y-auto pr-1">
+          {/* Parent Category Selector */}
+          {parentTopics.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                Vincular como Subconteúdo de (opcional)
+              </label>
+              <Select
+                value={parentId}
+                onChange={(e) => setParentId(e.target.value)}
+              >
+                <option value="">Nenhum (Tópico / Módulo Principal)</option>
+                {parentTopics
+                  .filter((p) => !topicToEdit || p.id !== topicToEdit.id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      ↳ {p.title}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
               Título do Conteúdo *
@@ -158,7 +197,7 @@ export function TopicModal({
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Teorema de Pitágoras, Regra da Cadeia"
+              placeholder="Ex: Lei de Fourier, Condução Unidimensional"
               required
               autoFocus
             />
@@ -166,12 +205,12 @@ export function TopicModal({
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Descrição / Subtópicos (opcional)
+              Descrição / Anotações Rápidas (opcional)
             </label>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Seção 2.3 do livro, exercícios 1 a 15"
+              placeholder="Ex: Slide 12 a 25 da aula, lista 2"
             />
           </div>
 
@@ -221,7 +260,7 @@ export function TopicModal({
                 max="100"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
-                placeholder="Ex: 3"
+                placeholder="Ex: 2"
               />
             </div>
 
@@ -263,6 +302,8 @@ export function TopicModal({
               </>
             ) : topicToEdit ? (
               "Salvar Alterações"
+            ) : parentId ? (
+              "Cadastrar Subtópico"
             ) : (
               "Cadastrar Tópico"
             )}

@@ -31,7 +31,8 @@ export async function batchCreateTopicsAction(formData: unknown) {
     const result = await topicService.batchCreateTopics(
       validated.subjectId,
       validated.rawText,
-      validated.assessmentId
+      validated.assessmentId,
+      validated.parentId
     );
     revalidatePath(`/subjects/${validated.subjectId}`);
     revalidatePath("/studies");

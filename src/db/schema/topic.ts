@@ -6,6 +6,7 @@ import {
   real,
   timestamp,
   pgEnum,
+  AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { subjects } from "./subject";
 import { assessments } from "./assessment";
@@ -23,6 +24,11 @@ export const topics = pgTable("topics", {
   subjectId: uuid("subject_id")
     .notNull()
     .references(() => subjects.id, { onDelete: "cascade" }),
+
+  // Parent topic for hierarchical topics / subtopics (null for main topics)
+  parentId: uuid("parent_id").references((): AnyPgColumn => topics.id, {
+    onDelete: "cascade",
+  }),
 
   title: text("title").notNull(),
   description: text("description"),

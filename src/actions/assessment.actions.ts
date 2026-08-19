@@ -65,7 +65,7 @@ export async function saveGradeAction(formData: unknown, subjectId?: string) {
     const result = await assessmentService.saveAssessmentResult(
       validated.assessmentId,
       validated.grade,
-      validated.notes
+      validated.feedback
     );
     if (subjectId) {
       revalidatePath(`/subjects/${subjectId}`);

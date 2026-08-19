@@ -6,6 +6,7 @@ import {
   calculateMasteryAverage,
   calculateMasteryDistribution,
   calculateEstimatedRemainingStudyHours,
+  buildTopicTree,
 } from "@/domain/topics";
 
 export async function getTopicsBySubjectId(subjectId: string) {
@@ -13,6 +14,7 @@ export async function getTopicsBySubjectId(subjectId: string) {
     .select({
       id: topics.id,
       subjectId: topics.subjectId,
+      parentId: topics.parentId,
       title: topics.title,
       description: topics.description,
       orderIndex: topics.orderIndex,
@@ -41,9 +43,11 @@ export async function getSubjectTopicsSummary(subjectId: string) {
   const mastery = calculateMasteryAverage(topicList);
   const distribution = calculateMasteryDistribution(topicList);
   const remainingHours = calculateEstimatedRemainingStudyHours(topicList);
+  const tree = buildTopicTree(topicList);
 
   return {
     topics: topicList,
+    tree,
     progress,
     mastery,
     distribution,
@@ -53,6 +57,7 @@ export async function getSubjectTopicsSummary(subjectId: string) {
 
 export async function createTopic(data: {
   subjectId: string;
+  parentId?: string | null;
   title: string;
   description?: string | null;
   orderIndex?: number;
@@ -81,6 +86,7 @@ export async function createTopic(data: {
     .insert(topics)
     .values({
       subjectId: data.subjectId,
+      parentId: data.parentId || null,
       title: data.title.trim(),
       description: data.description || null,
       orderIndex,
@@ -100,7 +106,8 @@ export async function createTopic(data: {
 export async function batchCreateTopics(
   subjectId: string,
   rawText: string,
-  assessmentId?: string | null
+  assessmentId?: string | null,
+  parentId?: string | null
 ) {
   const lines = rawText
     .split("\n")
@@ -124,6 +131,7 @@ export async function batchCreateTopics(
 
     return {
       subjectId,
+      parentId: parentId || null,
       title: cleanedTitle,
       orderIndex: startOrder + index,
       masteryLevel: 0,
@@ -142,6 +150,7 @@ export async function batchCreateTopics(
 export async function updateTopic(
   id: string,
   data: Partial<{
+    parentId: string | null;
     title: string;
     description: string | null;
     orderIndex: number;

@@ -168,3 +168,95 @@ export const updateGradingSchemeWithComponentsSchema = z.object({
     )
     .min(1, "Adicione pelo menos um componente de avaliação."),
 });
+
+// ─── Assessment & Results ───────────────────────────────────────────────────
+
+export const assessmentTypeSchema = z.enum(
+  ["EXAM", "FINAL_EXAM", "ASSIGNMENT", "OTHER"],
+  {
+    errorMap: () => ({ message: "Tipo de avaliação inválido." }),
+  }
+);
+
+export const assessmentStatusSchema = z.enum(
+  ["SCHEDULED", "COMPLETED", "CANCELED"],
+  {
+    errorMap: () => ({ message: "Status de avaliação inválido." }),
+  }
+);
+
+export const createAssessmentSchema = z.object({
+  subjectId: z.string({ required_error: "Disciplina é obrigatória." }).uuid("ID de disciplina inválido."),
+  gradeComponentId: z.string().uuid("ID de componente inválido.").optional().nullable(),
+  title: z
+    .string({ required_error: "Informe o título da avaliação." })
+    .min(1, "Informe o título da avaliação (ex: Prova 1 - P1).")
+    .max(200, "O título deve ter no máximo 200 caracteres."),
+  type: assessmentTypeSchema.default("EXAM"),
+  date: z.string().optional().nullable(),
+  maxGrade: z
+    .number({ invalid_type_error: "Nota máxima deve ser um número." })
+    .min(0.1, "Nota máxima deve ser maior que zero.")
+    .max(100, "Nota máxima inválida.")
+    .default(10),
+  status: assessmentStatusSchema.default("SCHEDULED"),
+  notes: z.string().optional().nullable(),
+  grade: z
+    .number({ invalid_type_error: "Nota deve ser um número." })
+    .min(0, "A nota não pode ser negativa.")
+    .max(100, "A nota não pode exceder o valor máximo.")
+    .optional()
+    .nullable(),
+});
+
+export const updateAssessmentSchema = createAssessmentSchema.partial();
+
+export const saveGradeSchema = z.object({
+  assessmentId: z.string().uuid("ID de avaliação inválido."),
+  grade: z
+    .number({ required_error: "Informe a nota obtida." })
+    .min(0, "A nota não pode ser negativa.")
+    .max(100, "A nota não pode exceder 100."),
+  notes: z.string().optional().nullable(),
+});
+
+// ─── ClassSession & Attendance ──────────────────────────────────────────────
+
+export const classSessionStatusSchema = z.enum(
+  ["SCHEDULED", "HELD", "CANCELED"],
+  {
+    errorMap: () => ({ message: "Status de aula inválido." }),
+  }
+);
+
+export const attendanceStatusSchema = z.enum(
+  ["PRESENT", "ABSENT", "PARTIAL", "EXCUSED", "NOT_RECORDED"],
+  {
+    errorMap: () => ({ message: "Status de presença inválido." }),
+  }
+);
+
+export const createClassSessionSchema = z.object({
+  subjectId: z.string().uuid("ID de disciplina inválido."),
+  scheduleId: z.string().uuid("ID de horário inválido.").optional().nullable(),
+  date: z.string({ required_error: "Informe a data da aula." }).min(1, "Informe a data da aula."),
+  startTime: z.string().optional().nullable(),
+  endTime: z.string().optional().nullable(),
+  absenceUnits: z
+    .number({ invalid_type_error: "Unidades de ausência deve ser um número." })
+    .int("Unidades de ausência deve ser um número inteiro.")
+    .min(1, "A aula deve valer pelo menos 1 unidade.")
+    .default(1),
+  status: classSessionStatusSchema.default("SCHEDULED"),
+});
+
+export const recordAttendanceSchema = z.object({
+  classSessionId: z.string().uuid("ID de aula inválido."),
+  status: attendanceStatusSchema,
+  absentUnits: z
+    .number({ required_error: "Informe as unidades de falta." })
+    .int()
+    .min(0, "Unidades de falta não podem ser negativas.")
+    .default(0),
+  notes: z.string().optional().nullable(),
+});

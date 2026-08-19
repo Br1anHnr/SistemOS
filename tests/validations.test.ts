@@ -4,6 +4,10 @@ import {
   createSubjectSchema,
   createSubjectScheduleSchema,
   updateGradingSchemeWithComponentsSchema,
+  createAssessmentSchema,
+  saveGradeSchema,
+  createClassSessionSchema,
+  recordAttendanceSchema,
 } from "@/validations";
 
 describe("Zod Validations for Academic Entities", () => {
@@ -155,6 +159,65 @@ describe("Zod Validations for Academic Entities", () => {
 
       const result = updateGradingSchemeWithComponentsSchema.safeParse(invalid);
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("createAssessmentSchema & saveGradeSchema", () => {
+    it("should accept valid assessment creation data", () => {
+      const valid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        title: "Prova 1 (P1)",
+        type: "EXAM" as const,
+        date: "2026-04-15",
+        maxGrade: 10,
+        grade: 8.5,
+      };
+
+      const result = createAssessmentSchema.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it("should validate grade range in saveGradeSchema", () => {
+      const valid = {
+        assessmentId: "123e4567-e89b-12d3-a456-426614174000",
+        grade: 9.25,
+      };
+      expect(saveGradeSchema.safeParse(valid).success).toBe(true);
+
+      const negative = {
+        assessmentId: "123e4567-e89b-12d3-a456-426614174000",
+        grade: -1,
+      };
+      expect(saveGradeSchema.safeParse(negative).success).toBe(false);
+    });
+  });
+
+  describe("createClassSessionSchema & recordAttendanceSchema", () => {
+    it("should validate class session data", () => {
+      const valid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        date: "2026-03-10",
+        startTime: "19:00",
+        endTime: "20:40",
+        absenceUnits: 2,
+      };
+      expect(createClassSessionSchema.safeParse(valid).success).toBe(true);
+    });
+
+    it("should validate attendance record status and absent units", () => {
+      const valid = {
+        classSessionId: "123e4567-e89b-12d3-a456-426614174000",
+        status: "ABSENT" as const,
+        absentUnits: 1,
+      };
+      expect(recordAttendanceSchema.safeParse(valid).success).toBe(true);
+
+      const invalidUnits = {
+        classSessionId: "123e4567-e89b-12d3-a456-426614174000",
+        status: "ABSENT" as const,
+        absentUnits: -1,
+      };
+      expect(recordAttendanceSchema.safeParse(invalidUnits).success).toBe(false);
     });
   });
 });

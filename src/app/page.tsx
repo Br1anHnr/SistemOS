@@ -1,6 +1,7 @@
 import { getActiveSemester, getAllSemesters } from "@/services/semester.service";
 import { getSubjectsBySemesterId } from "@/services/subject.service";
 import { getTodaySchedules, getWeeklySchedulesForSemester } from "@/services/schedule.service";
+import { getUpcomingAssessmentsForSemester } from "@/services/assessment.service";
 import { DashboardView, DashboardData } from "@/components/dashboard/dashboard-view";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export default async function HomePage() {
 
   let subjects: DashboardData["subjects"] = [];
   let todaySchedules: DashboardData["todaySchedules"] = [];
+  let upcomingAssessments: DashboardData["upcomingAssessments"] = [];
   let totalWeeklySchedulesCount = 0;
 
   if (activeSemester) {
@@ -50,6 +52,19 @@ export default async function HomePage() {
 
     const weeklySchedules = await getWeeklySchedulesForSemester(activeSemester.id);
     totalWeeklySchedulesCount = weeklySchedules.length;
+
+    const rawUpcoming = await getUpcomingAssessmentsForSemester(activeSemester.id);
+    upcomingAssessments = rawUpcoming.map((a) => ({
+      id: a.id,
+      subjectId: a.subjectId,
+      title: a.title,
+      type: a.type,
+      date: a.date,
+      maxGrade: a.maxGrade,
+      status: a.status,
+      subject: a.subject,
+      result: a.result ? { grade: a.result.grade } : null,
+    }));
   }
 
   const dashboardData: DashboardData = {
@@ -66,6 +81,7 @@ export default async function HomePage() {
     allSemesters: allSemesters.map((s) => ({ id: s.id, name: s.name })),
     subjects,
     todaySchedules,
+    upcomingAssessments,
     totalWeeklySchedulesCount,
   };
 

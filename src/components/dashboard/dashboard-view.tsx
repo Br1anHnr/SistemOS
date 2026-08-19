@@ -59,6 +59,22 @@ export interface DashboardData {
       color?: string | null;
     } | null;
   }>;
+  upcomingAssessments: Array<{
+    id: string;
+    subjectId: string;
+    title: string;
+    type: "EXAM" | "FINAL_EXAM" | "ASSIGNMENT" | "OTHER";
+    date?: string | null;
+    maxGrade: number;
+    status: "SCHEDULED" | "COMPLETED" | "CANCELED";
+    subject?: {
+      id: string;
+      name: string;
+      code?: string | null;
+      color?: string | null;
+    } | null;
+    result?: { grade: number } | null;
+  }>;
   totalWeeklySchedulesCount: number;
 }
 
@@ -77,6 +93,8 @@ export function DashboardView({ data }: { data: DashboardData }) {
     if (hour >= 12 && hour < 18) return "Boa tarde";
     return "Boa noite";
   }, []);
+
+  const nextAssessment = data.upcomingAssessments[0] || null;
 
   if (!data.activeSemester) {
     return (
@@ -188,12 +206,26 @@ export function DashboardView({ data }: { data: DashboardData }) {
               <span>Próx. Avaliação</span>
               <Award className="h-4 w-4 text-amber-400" />
             </div>
-            <div className="text-sm font-semibold text-neutral-200 truncate mt-1">
-              Nenhuma
-            </div>
-            <p className="text-[11px] text-neutral-400 mt-1">
-              0 avaliações agendadas
-            </p>
+            {nextAssessment ? (
+              <div>
+                <div className="text-sm font-semibold text-neutral-100 truncate mt-1">
+                  {nextAssessment.title}
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-0.5">
+                  {nextAssessment.date ? new Date(nextAssessment.date).toLocaleDateString("pt-BR") : "Data a definir"}
+                  {nextAssessment.subject ? ` • ${nextAssessment.subject.name}` : ""}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="text-sm font-semibold text-neutral-200 truncate mt-1">
+                  Nenhuma
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-1">
+                  0 avaliações agendadas
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -259,23 +291,60 @@ export function DashboardView({ data }: { data: DashboardData }) {
         {/* Próximas Avaliações */}
         <Card className="border-neutral-800 bg-neutral-900/40">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Award className="h-4 w-4 text-amber-400" />
-              Próximas Avaliações
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Award className="h-4 w-4 text-amber-400" />
+                Próximas Avaliações
+              </CardTitle>
+              <Link href="/assessments">
+                <Button variant="ghost" size="sm" className="text-xs text-neutral-400 hover:text-white p-0">
+                  Ver todas
+                </Button>
+              </Link>
+            </div>
             <CardDescription>
-              Provas, trabalhos e entregas do semestre
+              Provas, trabalhos e entregas agendadas
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="pt-0">
-            <div className="p-6 rounded-lg border border-dashed border-neutral-850 text-center text-xs text-neutral-400 space-y-1">
-              <Award className="h-5 w-5 text-neutral-600 mx-auto mb-1" />
-              <p className="font-medium text-neutral-300">Nenhuma avaliação cadastrada.</p>
-              <p className="text-[11px] text-neutral-400">
-                O gerenciamento detalhado de datas de provas será integrado na aba Avaliações.
-              </p>
-            </div>
+          <CardContent className="pt-0 space-y-2.5">
+            {data.upcomingAssessments.length === 0 ? (
+              <div className="p-6 rounded-lg border border-dashed border-neutral-850 text-center text-xs text-neutral-400 space-y-1">
+                <Award className="h-5 w-5 text-neutral-600 mx-auto mb-1" />
+                <p className="font-medium text-neutral-300">Nenhuma avaliação cadastrada.</p>
+                <p className="text-[11px] text-neutral-400">
+                  Cadastre suas provas na aba de Avaliações ou na página da disciplina.
+                </p>
+              </div>
+            ) : (
+              data.upcomingAssessments.slice(0, 4).map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between p-3 rounded-md bg-neutral-950/60 border border-neutral-850"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: a.subject?.color || "#3b82f6" }}
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-100">
+                        {a.title}
+                      </div>
+                      <div className="text-xs text-neutral-400">
+                        {a.subject?.name} • {a.date ? new Date(a.date).toLocaleDateString("pt-BR") : "Data pendente"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link href={`/subjects/${a.subjectId}`}>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-neutral-400 hover:text-white">
+                      Ver
+                    </Button>
+                  </Link>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

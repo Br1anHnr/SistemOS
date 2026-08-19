@@ -3,13 +3,34 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit2, Trash2, BookOpen, Clock, Award, UserCheck, FileText, User, MapPin, Gauge, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit2,
+  Trash2,
+  BookOpen,
+  Clock,
+  Award,
+  UserCheck,
+  FileText,
+  User,
+  MapPin,
+  Gauge,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SubjectScheduleTab, ScheduleItem } from "@/components/subject/subject-schedule-tab";
-import { SubjectGradesTab, GradingSchemeItem } from "@/components/subject/subject-grades-tab";
+import {
+  SubjectGradesTab,
+  GradingSchemeItem,
+  AssessmentItem,
+} from "@/components/subject/subject-grades-tab";
+import {
+  SubjectAttendanceTab,
+  ClassSessionWithAttendance,
+} from "@/components/subject/subject-attendance-tab";
 import { SubjectModal } from "@/components/subject/subject-modal";
 import { deleteSubjectAction } from "@/actions/subject.actions";
 import { useToast } from "@/components/ui/toast";
@@ -30,6 +51,8 @@ export interface SubjectDetailsData {
   semester: { id: string; name: string; academicTerm: string; academicYear: string } | null;
   schedules: ScheduleItem[];
   gradingScheme: GradingSchemeItem | null;
+  assessments?: AssessmentItem[];
+  classSessions?: ClassSessionWithAttendance[];
 }
 
 export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
@@ -41,7 +64,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
   const handleDelete = async () => {
     if (
       !confirm(
-        `Tem certeza que deseja excluir a disciplina "${subject.name}"? Todos os horários e configurações de notas também serão removidos.`
+        `Tem certeza que deseja excluir a disciplina "${subject.name}"? Todos os horários, notas e faltas também serão removidos.`
       )
     ) {
       return;
@@ -135,11 +158,11 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
           </TabsTrigger>
           <TabsTrigger value="grades">
             <Award className="h-3.5 w-3.5 mr-1.5" />
-            Notas & Avaliações
+            Notas & Avaliações ({subject.assessments?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="attendance">
             <UserCheck className="h-3.5 w-3.5 mr-1.5" />
-            Faltas
+            Faltas & Presenças ({subject.classSessions?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="topics">
             <FileText className="h-3.5 w-3.5 mr-1.5" />
@@ -236,20 +259,23 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
 
         {/* Grades Tab */}
         <TabsContent value="grades">
-          <SubjectGradesTab subjectId={subject.id} gradingScheme={subject.gradingScheme} />
+          <SubjectGradesTab
+            subjectId={subject.id}
+            gradingScheme={subject.gradingScheme}
+            assessments={subject.assessments || []}
+          />
         </TabsContent>
 
-        {/* In-Development Tabs */}
+        {/* Attendance Tab */}
         <TabsContent value="attendance">
-          <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-2">
-            <UserCheck className="h-8 w-8 text-neutral-500 mx-auto" />
-            <h4 className="text-sm font-semibold text-neutral-200">Módulo de Frequência</h4>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-              O registro diário de faltas e simulação de faltas restantes estará disponível na próxima etapa.
-            </p>
-          </div>
+          <SubjectAttendanceTab
+            subjectId={subject.id}
+            minimumAttendancePercentage={subject.minimumAttendancePercentage}
+            sessions={subject.classSessions || []}
+          />
         </TabsContent>
 
+        {/* Topics Tab */}
         <TabsContent value="topics">
           <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-2">
             <FileText className="h-8 w-8 text-neutral-500 mx-auto" />

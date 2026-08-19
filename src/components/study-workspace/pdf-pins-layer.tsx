@@ -17,6 +17,7 @@ import {
   X,
   Check,
   Loader2,
+  LayoutGrid,
 } from "lucide-react";
 
 export type PinCreationType = "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "EXAM";
@@ -40,6 +41,17 @@ interface PdfPinsLayerProps {
       height?: number;
     };
   }) => Promise<void>;
+  onAddToBoard?: (data: {
+    bounding: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    pageNumber: number;
+    title?: string;
+    anchorId?: string | null;
+  }) => void;
 }
 
 export function PdfPinsLayer({
@@ -51,6 +63,7 @@ export function PdfPinsLayer({
   activeTool,
   onSelectNote,
   onCreateAnchoredNote,
+  onAddToBoard,
 }: PdfPinsLayerProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -145,7 +158,7 @@ export function PdfPinsLayer({
     }
   };
 
-  const handleSavePopover = async (e: React.FormEvent) => {
+  const handleSavePopover = async (e: React.FormEvent, sendToBoard = false) => {
     e.preventDefault();
     if (!popover || !newNoteContent.trim()) return;
 
@@ -157,6 +170,20 @@ export function PdfPinsLayer({
         anchorType: popover.anchorType,
         anchorData: popover.anchorData,
       });
+
+      if (sendToBoard && popover.anchorType === "REGION" && popover.anchorData.width && popover.anchorData.height) {
+        onAddToBoard?.({
+          bounding: {
+            x: popover.anchorData.x,
+            y: popover.anchorData.y,
+            width: popover.anchorData.width,
+            height: popover.anchorData.height,
+          },
+          pageNumber,
+          title: newNoteContent.slice(0, 30),
+        });
+      }
+
       setPopover(null);
       setNewNoteContent("");
     } catch {
@@ -277,15 +304,42 @@ export function PdfPinsLayer({
                   : "border-indigo-400/70 bg-indigo-500/10 hover:border-indigo-300 hover:bg-indigo-500/20"
               }`}
             >
-              {/* Region Label Tag */}
-              <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-neutral-950/80 text-indigo-200 border border-indigo-700/60 shadow-sm pointer-events-none">
-                {note.type === "FORMULA"
-                  ? "ƒ Fórmula"
-                  : note.type === "QUESTION"
-                  ? "? Dúvida"
-                  : note.type === "EXAM"
-                  ? "⚠️ Prova"
-                  : "📐 Trecho"}
+              {/* Region Label Tag & Quick Add To Board */}
+              <div className="absolute top-1 left-1 flex items-center gap-1">
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-neutral-950/80 text-indigo-200 border border-indigo-700/60 shadow-sm pointer-events-none">
+                  {note.type === "FORMULA"
+                    ? "ƒ Fórmula"
+                    : note.type === "QUESTION"
+                    ? "? Dúvida"
+                    : note.type === "EXAM"
+                    ? "⚠️ Prova"
+                    : "📐 Trecho"}
+                </span>
+
+                {onAddToBoard && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddToBoard({
+                        bounding: {
+                          x: anchor.data.x,
+                          y: anchor.data.y,
+                          width: anchor.data.width!,
+                          height: anchor.data.height!,
+                        },
+                        pageNumber,
+                        anchorId: anchor.id,
+                        title: note.content.slice(0, 30),
+                      });
+                    }}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-purple-600 hover:bg-purple-500 text-white shadow-sm flex items-center gap-0.5 transition-colors"
+                    title="Adicionar este trecho à Lousa de estudo"
+                  >
+                    <LayoutGrid className="h-2.5 w-2.5" />
+                    <span>+ Lousa</span>
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -335,7 +389,7 @@ export function PdfPinsLayer({
             </button>
           </div>
 
-          <form onSubmit={handleSavePopover} className="space-y-2">
+          <form onSubmit={(e) => handleSavePopover(e, false)} className="space-y-2">
             {/* Type selector */}
             <div className="grid grid-cols-5 gap-1 text-[9px]">
               {(
@@ -371,28 +425,46 @@ export function PdfPinsLayer({
               autoFocus
             />
 
-            <div className="flex items-center justify-end gap-1.5 pt-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setPopover(null)}
-                className="h-6 text-[11px] text-neutral-400"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isSaving || !newNoteContent.trim()}
-                className="h-6 text-[11px] bg-purple-600 hover:bg-purple-500 text-white"
-              >
-                {isSaving ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  "Salvar"
-                )}
-              </Button>
+            <div className="flex items-center justify-between gap-1.5 pt-1">
+              {popover.anchorType === "REGION" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isSaving || !newNoteContent.trim()}
+                  onClick={(e) => handleSavePopover(e, true)}
+                  className="h-6 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
+                  title="Salva a nota e envia o trecho para a Lousa de estudo"
+                >
+                  <LayoutGrid className="h-2.5 w-2.5" />
+                  + Lousa
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPopover(null)}
+                  className="h-6 text-[11px] text-neutral-400"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSaving || !newNoteContent.trim()}
+                  className="h-6 text-[11px] bg-purple-600 hover:bg-purple-500 text-white"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Salvar"
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </div>

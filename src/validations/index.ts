@@ -499,5 +499,56 @@ export const createAnchoredNoteSchema = z.object({
   anchorData: z.record(z.any()),
 });
 
+// ─── Study Boards (Fase C1) ──────────────────────────────────────────────────
+
+export const studyBoardItemTypeSchema = z.enum(
+  ["TEXT", "NOTE", "DRAWING", "ARROW", "PDF_REGION"],
+  {
+    errorMap: () => ({ message: "Tipo de elemento da lousa inválido." }),
+  }
+);
+
+export const createStudyBoardItemSchema = z.object({
+  boardId: z
+    .string({ required_error: "ID da lousa é obrigatório." })
+    .uuid("ID de lousa inválido."),
+  type: studyBoardItemTypeSchema,
+  data: z.record(z.any()),
+  x: z.number().default(0),
+  y: z.number().default(0),
+  width: z.number().default(200),
+  height: z.number().default(150),
+  zIndex: z.number().int().default(0),
+});
+
+export const updateStudyBoardItemSchema = z.object({
+  data: z.record(z.any()).optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  zIndex: z.number().int().optional(),
+});
+
+export const addPdfRegionToBoardSchema = z.object({
+  topicId: z
+    .string({ required_error: "ID do tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  pageNumber: z
+    .number({ required_error: "O número da página é obrigatório." })
+    .int("Número da página deve ser um inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1."),
+  anchorId: z.string().uuid("ID de âncora inválido.").optional().nullable(),
+  bounding: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+  title: z.string().optional().nullable(),
+});
+
+
 
 

@@ -42,6 +42,7 @@ import {
   BookOpen,
   Bookmark,
   PenLine,
+  LayoutGrid,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -111,6 +112,7 @@ export function SubjectTopicsTab({
 
   // Study Workspace state (Integrated PDF + Study Panel)
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
+  const [workspaceInitialMode, setWorkspaceInitialMode] = React.useState<"PDF" | "BOARD">("PDF");
   const [workspaceTopic, setWorkspaceTopic] = React.useState<TopicWithAssessment | null>(null);
   const [workspaceMaterial, setWorkspaceMaterial] = React.useState<SubjectMaterialItem | null>(null);
 
@@ -299,7 +301,7 @@ export function SubjectTopicsTab({
     setPdfViewerOpen(true);
   };
 
-  const handleOpenStudyWorkspace = (topic: TopicWithAssessment) => {
+  const handleOpenStudyWorkspace = (topic: TopicWithAssessment, mode: "PDF" | "BOARD" = "PDF") => {
     const linked =
       materialsByTopicId.get(topic.id) ||
       materials.find(
@@ -309,6 +311,7 @@ export function SubjectTopicsTab({
 
     setWorkspaceTopic(topic);
     setWorkspaceMaterial(linked);
+    setWorkspaceInitialMode(mode);
     setWorkspaceOpen(true);
   };
 
@@ -572,13 +575,27 @@ export function SubjectTopicsTab({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleOpenStudyWorkspace(parent);
+                            handleOpenStudyWorkspace(parent, "PDF");
                           }}
                           className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors shadow-sm"
                           title="Abrir Workspace de Estudo com PDF e notas"
                         >
                           <BookOpen className="h-3 w-3" />
                           Estudar
+                        </button>
+
+                        {/* LOUSA BUTTON */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudyWorkspace(parent, "BOARD");
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-purple-800/80 text-purple-300 hover:text-white hover:bg-purple-950/40 transition-colors"
+                          title="Abrir Lousa de estudo deste capítulo"
+                        >
+                          <LayoutGrid className="h-3 w-3" />
+                          Lousa
                         </button>
 
                         {/* VER PDF STANDALONE BUTTON */}
@@ -796,12 +813,22 @@ export function SubjectTopicsTab({
 
                               <button
                                 type="button"
-                                onClick={() => handleOpenStudyWorkspace(sub as any)}
+                                onClick={() => handleOpenStudyWorkspace(sub as any, "PDF")}
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/40 text-purple-300 border border-purple-800/60 hover:bg-purple-900/60"
                                 title="Estudar este subtópico"
                               >
                                 <BookOpen className="h-2.5 w-2.5" />
                                 Estudar
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStudyWorkspace(sub as any, "BOARD")}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-purple-800/60 text-purple-300 hover:text-white hover:bg-purple-950/40"
+                                title="Abrir Lousa deste subtópico"
+                              >
+                                <LayoutGrid className="h-2.5 w-2.5" />
+                                Lousa
                               </button>
 
                               {sub.assessmentTitle && (
@@ -840,19 +867,20 @@ export function SubjectTopicsTab({
                               <button
                                 onClick={() => {
                                   setEditingTopic(sub as any);
+                                  setTargetParentId(parent.id);
                                   setTopicModalOpen(true);
                                 }}
                                 className="p-1 hover:text-neutral-200"
-                                title="Editar Subtópico"
+                                title="Editar"
                               >
-                                <Edit2 className="h-3 w-3" />
+                                <Edit2 className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(sub.id, sub.title)}
                                 className="p-1 hover:text-red-400"
-                                title="Excluir Subtópico"
+                                title="Excluir"
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </div>
@@ -900,7 +928,7 @@ export function SubjectTopicsTab({
         fileName={activePdfFileName}
       />
 
-      {/* Integrated Study Workspace with Notes & Bookmarks */}
+      {/* Integrated Study Workspace with Notes & Bookmarks & Board */}
       {workspaceTopic && (
         <StudyWorkspaceModal
           open={workspaceOpen}
@@ -911,6 +939,7 @@ export function SubjectTopicsTab({
           materialId={workspaceMaterial?.id}
           pdfUrl={workspaceMaterial?.fileUrl}
           fileName={workspaceMaterial?.fileName}
+          initialMode={workspaceInitialMode}
         />
       )}
     </div>

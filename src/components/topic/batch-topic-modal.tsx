@@ -22,8 +22,6 @@ import {
   Trash2,
   Plus,
   CheckCircle2,
-  FileCode,
-  FileType,
 } from "lucide-react";
 
 interface BatchTopicModalProps {
@@ -79,17 +77,18 @@ export function BatchTopicModal({
     try {
       const fileName = file.name.toLowerCase();
 
-      // Client-side quick reading for text files
+      // 1. Client-side quick reading for text-based files
       if (
         fileName.endsWith(".txt") ||
         fileName.endsWith(".md") ||
+        fileName.endsWith(".markdown") ||
         fileName.endsWith(".csv")
       ) {
         const text = await file.text();
         const extracted = parseSyllabusText(text);
 
         if (extracted.length === 0) {
-          setError("Nenhum tópico identificado no arquivo.");
+          setError("Nenhum tópico programático identificado no arquivo de texto.");
           setExtracting(false);
           return;
         }
@@ -100,20 +99,45 @@ export function BatchTopicModal({
         return;
       }
 
-      // Server-side extraction for PDF
+      // 2. Client-side extraction for PDF files (instant & avoids network size limits)
+      if (fileName.endsWith(".pdf")) {
+        try {
+          const { extractText } = await import("unpdf");
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfData = await extractText(new Uint8Array(arrayBuffer));
+          const textContent = Array.isArray(pdfData.text)
+            ? pdfData.text.join("\n")
+            : (pdfData.text as string) || "";
+
+          if (textContent && textContent.trim().length > 0) {
+            const extracted = parseSyllabusText(textContent);
+
+            if (extracted.length > 0) {
+              setTopicsList(extracted);
+              setSourceFileName(file.name);
+              setExtracting(false);
+              return;
+            }
+          }
+        } catch {
+          // If browser worker fails, fallback to server action below
+        }
+      }
+
+      // 3. Server-side extraction fallback
       const formData = new FormData();
       formData.append("file", file);
 
       const res = await parseSyllabusFileAction(formData);
 
       if (!res.success || !res.topics) {
-        setError(res.error || "Erro ao extrair texto do arquivo.");
+        setError(res.error || "Erro ao extrair tópicos do arquivo.");
       } else {
         setTopicsList(res.topics);
         setSourceFileName(res.fileName || file.name);
       }
     } catch {
-      setError("Erro ao ler arquivo. Verifique se o arquivo é válido.");
+      setError("Erro ao ler o arquivo enviado. Tente outro formato ou cole o texto na aba ao lado.");
     } finally {
       setExtracting(false);
     }
@@ -234,7 +258,7 @@ export function BatchTopicModal({
                   : "text-neutral-400 hover:text-neutral-200"
               }`}
             >
-              Arrastar Arquivo (PDF / TXT)
+              Arrastar Arquivo (PDF / TXT / MD)
             </button>
             <button
               type="button"

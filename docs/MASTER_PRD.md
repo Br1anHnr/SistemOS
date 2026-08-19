@@ -137,7 +137,7 @@ Entidades principais previstas:
 | 2026-08-19 | Isolamento de Regras de Negócio e Testes com Vitest | Manter lógica acadêmica (médias, faltas, risco) desacoplada da UI em serviços de domínio 100% testáveis. |
 | 2026-08-19 | Exclusão de IA e Infraestrutura Complexa no MVP | Manter simplicidade operacional sem Redis, filas, automações externas (n8n) ou IA na primeira versão funcional. |
 | 2026-08-19 | GitHub `SistemOS` como repositório oficial | Versionamento centralizado no GitHub. |
-| 2026-08-19 | Supabase `SistemOS` (org: Triyo Teste) como PostgreSQL hospedado | Supabase fornece apenas o PostgreSQL; Drizzle ORM é a fonte de definição do schema via migrations versionadas. |
+| 2026-08-19 | Supabase `SistemOS` (ref: `eeneljkwnpmnixlmdccp`, org: Triyo Teste) | Supabase fornece o PostgreSQL hospedado; Drizzle ORM é a fonte de definição do schema via migrations versionadas. |
 | 2026-08-19 | Média ponderada genérica como regra padrão | `Σ(nota × peso) / Σ(pesos)`. Preset P1/P2 peso 1/1 produz média simples; pesos configuráveis por disciplina. |
 | 2026-08-19 | Frequência baseada em unidades de ausência | `absenceUnits` por sessão permite representar aulas duplas/triplas. Aulas canceladas excluídas do cálculo. Percentual mínimo configurável (default 75%). |
 | 2026-08-19 | Valores derivados não são persistidos no banco | `currentAverage`, `attendancePercentage`, `remainingAbsences` e `riskScore` são sempre calculados em tempo de leitura pelos serviços de domínio. |

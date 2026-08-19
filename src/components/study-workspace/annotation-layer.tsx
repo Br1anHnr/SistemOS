@@ -35,6 +35,7 @@ export interface AnnotationData {
 interface AnnotationLayerProps {
   pageWidth: number;
   pageHeight: number;
+  pageNumber: number;
   activeTool: AnnotationTool;
   color: string;
   strokeWidth: number;
@@ -48,6 +49,7 @@ interface AnnotationLayerProps {
 export function AnnotationLayer({
   pageWidth,
   pageHeight,
+  pageNumber,
   activeTool,
   color,
   strokeWidth,
@@ -102,7 +104,6 @@ export function AnnotationLayer({
     } else if (activeTool === "TEXT") {
       setTextPrompt({ x: norm.x, y: norm.y, text: "" });
     } else if (activeTool === "SELECT") {
-      // If clicked on empty space, deselect
       if ((e.target as Element).tagName === "svg") {
         setSelectedId(null);
       }
@@ -128,7 +129,7 @@ export function AnnotationLayer({
     if (activeTool === "PEN" && currentPoints.length > 1) {
       onAddAnnotation({
         type: "PEN",
-        pageNumber: 1,
+        pageNumber,
         data: {
           points: currentPoints,
           color,
@@ -139,7 +140,7 @@ export function AnnotationLayer({
     } else if (activeTool === "HIGHLIGHT" && currentPoints.length > 1) {
       onAddAnnotation({
         type: "HIGHLIGHT",
-        pageNumber: 1,
+        pageNumber,
         data: {
           points: currentPoints,
           color,
@@ -152,7 +153,7 @@ export function AnnotationLayer({
       if (distance > 0.01) {
         onAddAnnotation({
           type: "ARROW",
-          pageNumber: 1,
+          pageNumber,
           data: {
             startX: dragStart.x,
             startY: dragStart.y,
@@ -172,7 +173,7 @@ export function AnnotationLayer({
       if (width > 0.01 && height > 0.01) {
         onAddAnnotation({
           type: "RECTANGLE",
-          pageNumber: 1,
+          pageNumber,
           data: {
             x,
             y,
@@ -196,7 +197,7 @@ export function AnnotationLayer({
     if (textPrompt && textPrompt.text.trim()) {
       onAddAnnotation({
         type: "TEXT",
-        pageNumber: 1,
+        pageNumber,
         data: {
           x: textPrompt.x,
           y: textPrompt.y,
@@ -219,13 +220,18 @@ export function AnnotationLayer({
     return d;
   };
 
-  const isInteractive = activeTool !== "SELECT";
+  const isDrawingTool =
+    activeTool === "PEN" ||
+    activeTool === "HIGHLIGHT" ||
+    activeTool === "ARROW" ||
+    activeTool === "RECTANGLE" ||
+    activeTool === "TEXT";
 
   return (
     <div
       className="absolute inset-0 select-none overflow-hidden"
       style={{
-        pointerEvents: activeTool === "SELECT" ? "auto" : "auto",
+        pointerEvents: isVisible && activeTool !== "PIN" && activeTool !== "REGION" ? "auto" : "none",
         cursor:
           activeTool === "PEN"
             ? "crosshair"
@@ -242,19 +248,20 @@ export function AnnotationLayer({
     >
       <svg
         ref={containerRef}
-        className="w-full h-full absolute inset-0"
+        className="w-full h-full absolute inset-0 pointer-events-auto"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={() => {
           setIsDrawing(false);
           setCurrentPoints([]);
+          setDragStart(null);
+          setDragCurrent(null);
         }}
       >
         <defs>
-          {/* Arrow Head Marker */}
           <marker
-            id="arrowhead"
+            id="pdf-arrow-end"
             markerWidth="8"
             markerHeight="8"
             refX="6"
@@ -275,16 +282,20 @@ export function AnnotationLayer({
                 key={ann.id}
                 d={buildSvgPath(ann.data.points)}
                 stroke={ann.data.color || "#eab308"}
-                strokeWidth={ann.data.strokeWidth || 2}
+                strokeWidth={ann.data.strokeWidth || 4}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
                 opacity={ann.data.opacity ?? 1}
-                className="transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeTool === "ERASER") onDeleteAnnotation(ann.id);
-                  if (activeTool === "SELECT") setSelectedId(ann.id);
+                className="transition-opacity cursor-pointer"
+                onPointerDown={(e) => {
+                  if (activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
+                  } else if (activeTool === "SELECT") {
+                    e.stopPropagation();
+                    setSelectedId(ann.id);
+                  }
                 }}
               />
             );
@@ -302,10 +313,15 @@ export function AnnotationLayer({
                 fill="none"
                 opacity={ann.data.opacity ?? 0.35}
                 style={{ mixBlendMode: "multiply" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeTool === "ERASER") onDeleteAnnotation(ann.id);
-                  if (activeTool === "SELECT") setSelectedId(ann.id);
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  if (activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
+                  } else if (activeTool === "SELECT") {
+                    e.stopPropagation();
+                    setSelectedId(ann.id);
+                  }
                 }}
               />
             );
@@ -320,10 +336,15 @@ export function AnnotationLayer({
             return (
               <g
                 key={ann.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeTool === "ERASER") onDeleteAnnotation(ann.id);
-                  if (activeTool === "SELECT") setSelectedId(ann.id);
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  if (activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
+                  } else if (activeTool === "SELECT") {
+                    e.stopPropagation();
+                    setSelectedId(ann.id);
+                  }
                 }}
               >
                 <line
@@ -335,7 +356,6 @@ export function AnnotationLayer({
                   strokeWidth={ann.data.strokeWidth || 3}
                   strokeLinecap="round"
                 />
-                {/* Arrowhead polygon calculated manually for dynamic colors */}
                 <circle
                   cx={x2}
                   cy={y2}
@@ -363,10 +383,15 @@ export function AnnotationLayer({
                 strokeWidth={ann.data.strokeWidth || 2}
                 fill={ann.data.fillColor || "rgba(59, 130, 246, 0.15)"}
                 rx={4}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeTool === "ERASER") onDeleteAnnotation(ann.id);
-                  if (activeTool === "SELECT") setSelectedId(ann.id);
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  if (activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
+                  } else if (activeTool === "SELECT") {
+                    e.stopPropagation();
+                    setSelectedId(ann.id);
+                  }
                 }}
               />
             );
@@ -380,10 +405,15 @@ export function AnnotationLayer({
               <g
                 key={ann.id}
                 transform={`translate(${x}, ${y})`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (activeTool === "ERASER") onDeleteAnnotation(ann.id);
-                  if (activeTool === "SELECT") setSelectedId(ann.id);
+                className="cursor-pointer"
+                onPointerDown={(e) => {
+                  if (activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
+                  } else if (activeTool === "SELECT") {
+                    e.stopPropagation();
+                    setSelectedId(ann.id);
+                  }
                 }}
               >
                 <rect
@@ -423,22 +453,31 @@ export function AnnotationLayer({
             strokeLinecap={activeTool === "HIGHLIGHT" ? "square" : "round"}
             strokeLinejoin="round"
             fill="none"
-            opacity={activeTool === "HIGHLIGHT" ? 0.35 : 1}
+            opacity={activeTool === "HIGHLIGHT" ? 0.4 : 1}
+            style={activeTool === "HIGHLIGHT" ? { mixBlendMode: "multiply" } : undefined}
           />
         )}
 
         {/* In-Progress Live Arrow */}
         {isDrawing && activeTool === "ARROW" && dragStart && dragCurrent && (
-          <line
-            x1={dragStart.x * pageWidth}
-            y1={dragStart.y * pageHeight}
-            x2={dragCurrent.x * pageWidth}
-            y2={dragCurrent.y * pageHeight}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeDasharray="4 4"
-          />
+          <g>
+            <line
+              x1={dragStart.x * pageWidth}
+              y1={dragStart.y * pageHeight}
+              x2={dragCurrent.x * pageWidth}
+              y2={dragCurrent.y * pageHeight}
+              stroke={color}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray="4 4"
+            />
+            <circle
+              cx={dragCurrent.x * pageWidth}
+              cy={dragCurrent.y * pageHeight}
+              r={strokeWidth * 1.5}
+              fill={color}
+            />
+          </g>
         )}
 
         {/* In-Progress Live Rectangle */}
@@ -460,7 +499,7 @@ export function AnnotationLayer({
       {/* Selected Item Floating Delete Button */}
       {selectedId && (
         <div
-          className="absolute z-30"
+          className="absolute z-30 pointer-events-auto"
           style={{
             top: 10,
             right: 10,
@@ -484,7 +523,7 @@ export function AnnotationLayer({
       {textPrompt && (
         <form
           onSubmit={handleTextSubmit}
-          className="absolute z-30 bg-neutral-900 border border-purple-500 rounded p-1 shadow-2xl animate-in zoom-in-95"
+          className="absolute z-30 bg-neutral-900 border border-purple-500 rounded p-1 shadow-2xl animate-in zoom-in-95 pointer-events-auto"
           style={{
             left: `${textPrompt.x * 100}%`,
             top: `${textPrompt.y * 100}%`,

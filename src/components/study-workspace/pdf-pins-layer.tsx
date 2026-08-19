@@ -195,13 +195,17 @@ export function PdfPinsLayer({
 
   if (pageWidth === 0 || pageHeight === 0) return null;
 
+  const isLayerInteractive = activeTool === "PIN" || activeTool === "REGION";
+
   return (
     <div
       ref={containerRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className="absolute inset-0 select-none pointer-events-auto"
+      className={`absolute inset-0 select-none ${
+        isLayerInteractive ? "pointer-events-auto" : "pointer-events-none"
+      }`}
       style={{
         cursor:
           activeTool === "PIN"
@@ -247,7 +251,7 @@ export function PdfPinsLayer({
                 left: px,
                 top: py,
               }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 z-20 group cursor-pointer"
+              className="absolute -translate-x-1/2 -translate-y-1/2 z-20 group cursor-pointer pointer-events-auto"
             >
               {/* Pin Icon Bubble */}
               <div
@@ -298,7 +302,7 @@ export function PdfPinsLayer({
                 width: rw,
                 height: rh,
               }}
-              className={`absolute border-2 rounded transition-all cursor-pointer z-15 ${
+              className={`absolute border-2 rounded transition-all cursor-pointer z-15 pointer-events-auto ${
                 isSelected
                   ? "border-purple-400 bg-purple-500/25 ring-4 ring-purple-500/40 shadow-xl"
                   : "border-indigo-400/70 bg-indigo-500/10 hover:border-indigo-300 hover:bg-indigo-500/20"
@@ -369,7 +373,7 @@ export function PdfPinsLayer({
             left: `${Math.min(0.7, Math.max(0.1, popover.x)) * 100}%`,
             top: `${Math.min(0.7, Math.max(0.1, popover.y)) * 100}%`,
           }}
-          className="absolute z-40 w-72 p-3 bg-neutral-900 border border-purple-500 rounded-xl shadow-2xl animate-in zoom-in-95"
+          className="absolute z-40 w-72 p-3 bg-neutral-900 border border-purple-500 rounded-xl shadow-2xl animate-in zoom-in-95 pointer-events-auto"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-neutral-100 flex items-center gap-1.5">

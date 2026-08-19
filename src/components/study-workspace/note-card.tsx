@@ -93,8 +93,14 @@ export function NoteCard({
 
   const [saving, setSaving] = React.useState(false);
   const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
-
   const config = NOTE_TYPE_CONFIG[type] || NOTE_TYPE_CONFIG.NOTE;
+
+  // Sync internal state if note prop updates
+  React.useEffect(() => {
+    setContent(note.content);
+    setType(note.type || "NOTE");
+    setPageNumber(note.pageNumber ?? null);
+  }, [note.id, note.content, note.type, note.pageNumber]);
 
   // Debounced auto-save on content or type change
   React.useEffect(() => {
@@ -145,6 +151,7 @@ export function NoteCard({
 
   return (
     <div
+      id={`note-card-${note.id}`}
       onClick={onSelect}
       className={`rounded-lg border p-3 space-y-2.5 transition-all cursor-pointer ${
         isHighlighted

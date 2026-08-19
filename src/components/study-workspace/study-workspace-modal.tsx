@@ -279,13 +279,11 @@ export function StudyWorkspaceModal({
     const nextAnnotations = [...annotations, annotationWithId];
     setAnnotations(nextAnnotations);
 
-    // Update history stack
     const nextHistory = history.slice(0, historyIndex + 1);
     nextHistory.push(nextAnnotations);
     setHistory(nextHistory);
     setHistoryIndex(nextHistory.length - 1);
 
-    // Persist to server
     setIsSavingAnnotation(true);
     try {
       const res = await createPdfAnnotationAction(
@@ -492,6 +490,7 @@ export function StudyWorkspaceModal({
               <div className="flex items-center bg-neutral-950 border border-neutral-800 p-0.5 rounded-lg text-xs ml-2">
                 <button
                   type="button"
+                  data-testid="workspace-mode-pdf"
                   onClick={() => setWorkspaceMode("PDF")}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium ${
                     workspaceMode === "PDF"
@@ -504,7 +503,11 @@ export function StudyWorkspaceModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWorkspaceMode("BOARD")}
+                  data-testid="workspace-mode-board"
+                  onClick={() => {
+                    setWorkspaceMode("BOARD");
+                    loadBoardData();
+                  }}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium ${
                     workspaceMode === "BOARD"
                       ? "bg-purple-600 text-white shadow-sm"
@@ -666,131 +669,132 @@ export function StudyWorkspaceModal({
 
           {/* Main Area: Side-by-side (PDF or Board on left + Study Panel on right) */}
           <div className="flex-1 flex overflow-hidden relative">
-            {workspaceMode === "PDF" ? (
-              <>
-                {/* Floating Annotation Toolbar */}
-                {isAnnotationMode && activeUrl && !isMissing && (
-                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40">
-                    <AnnotationToolbar
-                      activeTool={activeTool}
-                      onSelectTool={setActiveTool}
-                      color={color}
-                      onChangeColor={setColor}
-                      strokeWidth={strokeWidth}
-                      onChangeStrokeWidth={setStrokeWidth}
-                      canUndo={historyIndex > 0}
-                      canRedo={historyIndex < history.length - 1}
-                      onUndo={handleUndo}
-                      onRedo={handleRedo}
-                      isVisible={isAnnotationVisible}
-                      onToggleVisibility={() => setIsAnnotationVisible((v) => !v)}
-                      isSaving={isSavingAnnotation}
-                      lastSavedAt={lastSavedAnnotation}
-                    />
-                  </div>
-                )}
-
-                {/* Left: PDF Document Canvas Area */}
-                <div className="flex-1 bg-neutral-900/40 overflow-auto flex items-center justify-center p-2 relative min-w-0">
-                  {loading ? (
-                    <div className="text-center space-y-2">
-                      <Loader2 className="h-8 w-8 text-purple-400 animate-spin mx-auto" />
-                      <p className="text-xs text-neutral-300">Carregando slide do capítulo...</p>
-                    </div>
-                  ) : isMissing ? (
-                    <div className="text-center space-y-4 max-w-md p-6 bg-neutral-950/80 rounded-xl border border-neutral-800">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".pdf"
-                        onChange={handleManualReupload}
-                        className="hidden"
-                      />
-
-                      <div className="h-12 w-12 rounded-full bg-purple-950/60 border border-purple-800 text-purple-400 flex items-center justify-center mx-auto">
-                        <UploadCloud className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-neutral-100">
-                          Sincronizar Material da Aula
-                        </h4>
-                        <p className="text-xs text-neutral-400 mt-1">
-                          O arquivo {fileName ? <strong className="text-neutral-200">{fileName}</strong> : "desta aula"} precisa ser sincronizado para leitura no navegador.
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-xs bg-purple-600 hover:bg-purple-500 text-white"
-                      >
-                        <UploadCloud className="h-3.5 w-3.5 mr-1.5" />
-                        Selecionar PDF
-                      </Button>
-                    </div>
-                  ) : activeUrl ? (
-                    <PdfCanvasRenderer
-                      pdfUrl={activeUrl}
-                      pageNumber={currentPage}
-                      zoom={zoom}
-                      onLoadSuccess={(pages) => setTotalPages(pages)}
-                    >
-                      {({ width, height }) => (
-                        <>
-                          {/* Graphical Drawings Layer (Fase B1) */}
-                          <AnnotationLayer
-                            pageWidth={width}
-                            pageHeight={height}
-                            activeTool={
-                              isAnnotationMode && activeTool !== "PIN" && activeTool !== "REGION"
-                                ? activeTool
-                                : "SELECT"
-                            }
-                            color={color}
-                            strokeWidth={strokeWidth}
-                            annotations={annotations}
-                            isVisible={isAnnotationVisible}
-                            onAddAnnotation={handleAddAnnotation}
-                            onUpdateAnnotation={() => {}}
-                            onDeleteAnnotation={handleDeleteAnnotation}
-                          />
-
-                          {/* Pins and Regions Semantic Layer (Fase B2) */}
-                          <PdfPinsLayer
-                            pageWidth={width}
-                            pageHeight={height}
-                            pageNumber={currentPage}
-                            anchoredNotes={anchoredNotes}
-                            selectedNoteId={selectedNoteId}
-                            activeTool={isAnnotationMode ? activeTool : "SELECT"}
-                            onSelectNote={handleSelectNoteFromPdf}
-                            onCreateAnchoredNote={handleCreateAnchoredNote}
-                            onAddToBoard={handleAddRegionToBoard}
-                          />
-                        </>
-                      )}
-                    </PdfCanvasRenderer>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              /* Left: Study Board Canvas Area (Fase C1) */
-              <div className="flex-1 relative min-w-0">
-                {boardData ? (
-                  <StudyBoardCanvas
-                    boardId={boardData.id}
-                    topicId={topicId}
-                    subjectId={subjectId}
-                    pdfUrl={activeUrl}
-                    initialItems={boardData.items}
-                    onOpenInPdf={handleOpenRegionInPdf}
+            {/* Left 1: PDF Document Viewport Area */}
+            <div className={workspaceMode === "PDF" ? "flex-1 flex overflow-hidden relative min-w-0" : "hidden"}>
+              {/* Floating Annotation Toolbar */}
+              {isAnnotationMode && activeUrl && !isMissing && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40">
+                  <AnnotationToolbar
+                    activeTool={activeTool}
+                    onSelectTool={setActiveTool}
+                    color={color}
+                    onChangeColor={setColor}
+                    strokeWidth={strokeWidth}
+                    onChangeStrokeWidth={setStrokeWidth}
+                    canUndo={historyIndex > 0}
+                    canRedo={historyIndex < history.length - 1}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    isVisible={isAnnotationVisible}
+                    onToggleVisibility={() => setIsAnnotationVisible((v) => !v)}
+                    isSaving={isSavingAnnotation}
+                    lastSavedAt={lastSavedAnnotation}
                   />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-neutral-400">
-                    <Loader2 className="h-6 w-6 animate-spin text-purple-400 mr-2" />
-                    <span className="text-xs">Carregando Lousa de estudo...</span>
+                </div>
+              )}
+
+              {/* PDF Document Canvas Area */}
+              <div className="flex-1 bg-neutral-900/40 overflow-auto flex items-center justify-center p-2 relative min-w-0">
+                {loading ? (
+                  <div className="text-center space-y-2">
+                    <Loader2 className="h-8 w-8 text-purple-400 animate-spin mx-auto" />
+                    <p className="text-xs text-neutral-300">Carregando slide do capítulo...</p>
                   </div>
-                )}
+                ) : isMissing ? (
+                  <div className="text-center space-y-4 max-w-md p-6 bg-neutral-950/80 rounded-xl border border-neutral-800">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleManualReupload}
+                      className="hidden"
+                    />
+
+                    <div className="h-12 w-12 rounded-full bg-purple-950/60 border border-purple-800 text-purple-400 flex items-center justify-center mx-auto">
+                      <UploadCloud className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-neutral-100">
+                        Sincronizar Material da Aula
+                      </h4>
+                      <p className="text-xs text-neutral-400 mt-1">
+                        O arquivo {fileName ? <strong className="text-neutral-200">{fileName}</strong> : "desta aula"} precisa ser sincronizado para leitura no navegador.
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs bg-purple-600 hover:bg-purple-500 text-white"
+                    >
+                      <UploadCloud className="h-3.5 w-3.5 mr-1.5" />
+                      Selecionar PDF
+                    </Button>
+                  </div>
+                ) : activeUrl ? (
+                  <PdfCanvasRenderer
+                    pdfUrl={activeUrl}
+                    pageNumber={currentPage}
+                    zoom={zoom}
+                    onLoadSuccess={(pages) => setTotalPages(pages)}
+                  >
+                    {({ width, height }) => (
+                      <>
+                        {/* Graphical Drawings Layer (Fase B1) */}
+                        <AnnotationLayer
+                          pageWidth={width}
+                          pageHeight={height}
+                          pageNumber={currentPage}
+                          activeTool={
+                            isAnnotationMode && activeTool !== "PIN" && activeTool !== "REGION"
+                              ? activeTool
+                              : "SELECT"
+                          }
+                          color={color}
+                          strokeWidth={strokeWidth}
+                          annotations={annotations}
+                          isVisible={isAnnotationVisible}
+                          onAddAnnotation={handleAddAnnotation}
+                          onUpdateAnnotation={() => {}}
+                          onDeleteAnnotation={handleDeleteAnnotation}
+                        />
+
+                        {/* Pins and Regions Semantic Layer (Fase B2) */}
+                        <PdfPinsLayer
+                          pageWidth={width}
+                          pageHeight={height}
+                          pageNumber={currentPage}
+                          anchoredNotes={anchoredNotes}
+                          selectedNoteId={selectedNoteId}
+                          activeTool={isAnnotationMode ? activeTool : "SELECT"}
+                          onSelectNote={handleSelectNoteFromPdf}
+                          onCreateAnchoredNote={handleCreateAnchoredNote}
+                          onAddToBoard={handleAddRegionToBoard}
+                        />
+                      </>
+                    )}
+                  </PdfCanvasRenderer>
+                ) : null}
               </div>
-            )}
+            </div>
+
+            {/* Left 2: Study Board Canvas Area (Fase C1) */}
+            <div className={workspaceMode === "BOARD" ? "flex-1 relative min-w-0" : "hidden"}>
+              {boardData ? (
+                <StudyBoardCanvas
+                  boardId={boardData.id}
+                  topicId={topicId}
+                  subjectId={subjectId}
+                  pdfUrl={activeUrl}
+                  initialItems={boardData.items}
+                  onItemsChange={(items) => setBoardData((prev) => prev ? { ...prev, items } : null)}
+                  onOpenInPdf={handleOpenRegionInPdf}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-neutral-400">
+                  <Loader2 className="h-6 w-6 animate-spin text-purple-400 mr-2" />
+                  <span className="text-xs">Carregando Lousa de estudo...</span>
+                </div>
+              )}
+            </div>
 
             {/* Right: Collapsible Study Panel */}
             {isPanelOpen && (

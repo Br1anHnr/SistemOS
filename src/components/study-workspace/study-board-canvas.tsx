@@ -26,6 +26,7 @@ interface StudyBoardCanvasProps {
   subjectId?: string;
   pdfUrl?: string | null;
   initialItems?: StudyBoardItemData[];
+  onItemsChange?: (items: StudyBoardItemData[]) => void;
   onOpenInPdf: (pageNumber: number, anchorId?: string | null) => void;
 }
 
@@ -35,6 +36,7 @@ export function StudyBoardCanvas({
   subjectId,
   pdfUrl,
   initialItems = [],
+  onItemsChange,
   onOpenInPdf,
 }: StudyBoardCanvasProps) {
   const { toast } = useToast();
@@ -107,11 +109,18 @@ export function StudyBoardCanvas({
   };
 
   const handlePointerDownBackground = (e: React.PointerEvent<HTMLDivElement>) => {
-    // If middle click or space key or SELECT on empty canvas -> Pan
-    if (e.button === 1 || (activeTool === "SELECT" && (e.target as Element).id === "board-bg")) {
+    // If middle click or SELECT on empty canvas -> Pan
+    const target = e.target as HTMLElement;
+    const isBackground =
+      target.id === "board-bg" ||
+      target.tagName === "svg" ||
+      target === containerRef.current;
+
+    if (e.button === 1 || (activeTool === "SELECT" && isBackground)) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       setSelectedItemId(null);
+      containerRef.current?.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -126,10 +135,12 @@ export function StudyBoardCanvas({
     } else if (activeTool === "PEN") {
       setIsDrawing(true);
       setCurrentStroke([{ x, y }]);
+      containerRef.current?.setPointerCapture(e.pointerId);
     } else if (activeTool === "ARROW") {
       setIsDrawing(true);
       setArrowStart({ x, y });
       setArrowCurrent({ x, y });
+      containerRef.current?.setPointerCapture(e.pointerId);
     }
   };
 
@@ -155,7 +166,7 @@ export function StudyBoardCanvas({
       setItems((prev) =>
         prev.map((item) =>
           item.id === draggingItem.id
-            ? { ...item, x: draggingItem.initialX + dx, y: draggingItem.initialY + dy }
+            ? { ...item, x: Math.round(draggingItem.initialX + dx), y: Math.round(draggingItem.initialY + dy) }
             : item
         )
       );
@@ -168,8 +179,8 @@ export function StudyBoardCanvas({
           item.id === resizingItem.id
             ? {
                 ...item,
-                width: Math.max(120, resizingItem.initialW + dw),
-                height: Math.max(80, resizingItem.initialH + dh),
+                width: Math.max(120, Math.round(resizingItem.initialW + dw)),
+                height: Math.max(80, Math.round(resizingItem.initialH + dh)),
               }
             : item
         )
@@ -269,8 +280,12 @@ export function StudyBoardCanvas({
       );
 
       if (res.success && res.data) {
-        setItems((prev) => [...prev, res.data as StudyBoardItemData]);
+        const nextItems = [...items, res.data as StudyBoardItemData];
+        setItems(nextItems);
+        onItemsChange?.(nextItems);
         setLastSavedAt(new Date());
+      } else {
+        toast(res.error || "Erro ao salvar elemento na lousa.", "error");
       }
     } catch {
       toast("Erro ao criar item na lousa.", "error");
@@ -322,8 +337,17 @@ export function StudyBoardCanvas({
   ) => {
     setIsSaving(true);
     try {
-      await updateStudyBoardItemAction(id, updates, subjectId);
-      setLastSavedAt(new Date());
+      const res = await updateStudyBoardItemAction(id, updates, subjectId);
+      if (res.success && res.data) {
+        setItems((prev) => {
+          const next = prev.map((item) => (item.id === id ? (res.data as StudyBoardItemData) : item));
+          onItemsChange?.(next);
+          return next;
+        });
+        setLastSavedAt(new Date());
+      } else {
+        toast(res.error || "Erro ao atualizar item na lousa.", "error");
+      }
     } catch {
       // Silently fail on autosave
     } finally {
@@ -332,7 +356,10 @@ export function StudyBoardCanvas({
   };
 
   const handleDeleteItem = async (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    const nextItems = items.filter((i) => i.id !== id);
+    setItems(nextItems);
+    onItemsChange?.(nextItems);
+
     setIsSaving(true);
     try {
       await deleteStudyBoardItemAction(id, subjectId);
@@ -348,18 +375,22 @@ export function StudyBoardCanvas({
   const handleBringToFront = (id: string) => {
     const maxZ = Math.max(...items.map((i) => i.zIndex), 0);
     const newZ = maxZ + 1;
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, zIndex: newZ } : item))
-    );
+    setItems((prev) => {
+      const next = prev.map((item) => (item.id === id ? { ...item, zIndex: newZ } : item));
+      onItemsChange?.(next);
+      return next;
+    });
     persistItemUpdate(id, { zIndex: newZ });
   };
 
   const handleSendToBack = (id: string) => {
     const minZ = Math.min(...items.map((i) => i.zIndex), 0);
     const newZ = Math.max(0, minZ - 1);
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, zIndex: newZ } : item))
-    );
+    setItems((prev) => {
+      const next = prev.map((item) => (item.id === id ? { ...item, zIndex: newZ } : item));
+      onItemsChange?.(next);
+      return next;
+    });
     persistItemUpdate(id, { zIndex: newZ });
   };
 
@@ -425,10 +456,11 @@ export function StudyBoardCanvas({
                     : "border-transparent hover:border-neutral-800 bg-neutral-900/60"
                 }`}
               >
-                <div className="flex items-center justify-between gap-1 pb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center justify-between gap-1 pb-1">
                   <div
                     onPointerDown={(e) => {
                       e.stopPropagation();
+                      (e.target as Element).setPointerCapture(e.pointerId);
                       setDraggingItem({
                         id: item.id,
                         startX: e.clientX,
@@ -438,13 +470,18 @@ export function StudyBoardCanvas({
                       });
                     }}
                     className="cursor-move p-0.5 text-neutral-500 hover:text-white"
+                    title="Mover texto"
                   >
                     <Move className="h-3 w-3" />
                   </div>
                   {isSelected && (
                     <button
-                      onClick={() => handleDeleteItem(item.id)}
-                      className="text-neutral-500 hover:text-red-400"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteItem(item.id);
+                      }}
+                      className="text-neutral-500 hover:text-red-400 p-0.5"
+                      title="Excluir"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -454,6 +491,11 @@ export function StudyBoardCanvas({
                 <input
                   type="text"
                   defaultValue={item.data.text}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
                   onBlur={(e) =>
                     persistItemUpdate(item.id, {
                       data: { ...item.data, text: e.target.value },
@@ -491,6 +533,7 @@ export function StudyBoardCanvas({
                   <div
                     onPointerDown={(e) => {
                       e.stopPropagation();
+                      (e.target as Element).setPointerCapture(e.pointerId);
                       setDraggingItem({
                         id: item.id,
                         startX: e.clientX,
@@ -517,7 +560,10 @@ export function StudyBoardCanvas({
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => handleBringToFront(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleBringToFront(item.id);
+                      }}
                       className="p-1 text-neutral-500 hover:text-white"
                       title="Trazer para frente"
                     >
@@ -525,7 +571,10 @@ export function StudyBoardCanvas({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSendToBack(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSendToBack(item.id);
+                      }}
                       className="p-1 text-neutral-500 hover:text-white"
                       title="Enviar para trás"
                     >
@@ -533,7 +582,10 @@ export function StudyBoardCanvas({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteItem(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteItem(item.id);
+                      }}
                       className="p-1 text-neutral-500 hover:text-red-400"
                       title="Excluir nota"
                     >
@@ -560,6 +612,7 @@ export function StudyBoardCanvas({
                 <div
                   onPointerDown={(e) => {
                     e.stopPropagation();
+                    (e.target as Element).setPointerCapture(e.pointerId);
                     setResizingItem({
                       id: item.id,
                       startX: e.clientX,
@@ -568,7 +621,7 @@ export function StudyBoardCanvas({
                       initialH: item.height,
                     });
                   }}
-                  className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize text-neutral-600 hover:text-white flex items-center justify-center"
+                  className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize text-neutral-600 hover:text-white flex items-center justify-center font-mono text-xs"
                 >
                   ⌟
                 </div>
@@ -599,6 +652,7 @@ export function StudyBoardCanvas({
                 <div
                   onPointerDown={(e) => {
                     e.stopPropagation();
+                    (e.target as Element).setPointerCapture(e.pointerId);
                     setDraggingItem({
                       id: item.id,
                       startX: e.clientX,
@@ -627,6 +681,7 @@ export function StudyBoardCanvas({
                 <div
                   onPointerDown={(e) => {
                     e.stopPropagation();
+                    (e.target as Element).setPointerCapture(e.pointerId);
                     setResizingItem({
                       id: item.id,
                       startX: e.clientX,

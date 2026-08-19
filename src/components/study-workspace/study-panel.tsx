@@ -126,6 +126,16 @@ export function StudyPanel({
     loadData();
   }, [topicId]);
 
+  // Auto-scroll to selected note card
+  React.useEffect(() => {
+    if (selectedNoteId) {
+      const el = document.getElementById(`note-card-${selectedNoteId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, [selectedNoteId]);
+
   // Create Note Submit
   const handleCreateNote = async (e: React.FormEvent) => {
     e.preventDefault();

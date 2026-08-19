@@ -141,6 +141,32 @@ Entidades principais previstas:
 | 2026-08-19 | Supabase `SistemOS` (ref: `eeneljkwnpmnixlmdccp`, org: Triyo Teste) | Supabase fornece o PostgreSQL hospedado; Drizzle ORM é a fonte de definição do schema via migrations versionadas. |
 | 2026-08-19 | Média ponderada genérica como regra padrão | `Σ(nota × peso) / Σ(pesos)`. Preset P1/P2 peso 1/1 produz média simples; pesos configuráveis por disciplina. |
 | 2026-08-19 | Frequência baseada em unidades de ausência | `absenceUnits` por sessão permite representar aulas duplas/triplas. Aulas canceladas excluídas do cálculo. Percentual mínimo configurável (default 75%). |
-| 2026-08-19 | Valores derivados não são persistidos no banco | `currentAverage`, `attendancePercentage`, `remainingAbsences` e `riskScore` são sempre calculados em tempo de leitura pelos serviços de domínio. |
+- **Níveis de domínio de tópicos (0 a 4):** Escala de domínio da ementa (0: Não Iniciado, 1: Básico, 2: Razoável, 3: Bom, 4: Dominado) com vínculo opcional a avaliações e horas estimadas de estudo.
+- **Módulo de Exercícios:**
+  - Estrutura hierárquica e relacional: `Disciplina -> Lista de Exercícios (opcional) -> Exercício -> Tentativas -> Resoluções / Fotos do Caderno` e `Exercício -> Capítulo / Tópico`.
+  - Histórico cronológico de tentativas por exercício com tempo de resolução (`durationMinutes`), dificuldade percebida (1–5), anotações e múltiplas fotos da resolução feita no caderno.
+  - Status dinâmico e derivado: sem tentativas = `PENDING`; última tentativa com sucesso = `RESOLVED`; tentativa parcial = `PARTIALLY_CORRECT`; erro = `WRONG`; flag manual ou não concluído = `REVIEW`.
+  - Isolamento estrito de disciplina: todas as consultas, actions e mutations validam `subjectId`.
+  - Armazenamento de arquivos de enunciado e fotos do caderno via IndexedDB / File Storage local sem sobrecarregar o PostgreSQL.
+  - Vínculo bidirecional com o Workspace de Estudo do Capítulo (`[Exercícios]`) e com as Avaliações (`P1`, `P2`, etc.).
+
+---
+
+## 10. Decisões Tomadas
+
+| Data | Decisão | Contexto / Motivo |
+|---|---|---|
+| 2026-08-19 | Foco exclusivo em Single-User | Eliminar overhead de sistemas SaaS, multi-inquilino, auth complexa e pagamentos, focando 100% na utilidade pessoal do usuário. |
+| 2026-08-19 | Centralização documental no `MASTER_PRD.md` | Manter uma fonte única de verdade estruturada para guiar todas as decisões de produto e engenharia sem fragmentação. |
+| 2026-08-19 | Stack: Next.js + TS + Tailwind + shadcn/ui + Drizzle + Supabase PG | Monólito web com App Router, tipagem estrita de ponta a ponta, design system consistente e ORM leve/type-safe. |
+| 2026-08-19 | Isolamento de Regras de Negócio e Testes com Vitest | Manter lógica acadêmica (médias, faltas, risco) desacoplada da UI em serviços de domínio 100% testáveis. |
+| 2026-08-19 | Exclusão de IA e Infraestrutura Complexa no MVP | Manter simplicidade operacional sem Redis, filas, automações externas (n8n) ou IA na primeira versão funcional. |
+| 2026-08-19 | GitHub `SistemOS` como repositório oficial | Versionamento centralizado no GitHub. |
+| 2026-08-19 | Supabase `SistemOS` (ref: `eeneljkwnpmnixlmdccp`, org: Triyo Teste) | Supabase fornece o PostgreSQL hospedado; Drizzle ORM é a fonte de definição do schema via migrations versionadas. |
+| 2026-08-19 | Média ponderada genérica como regra padrão | `Σ(nota × peso) / Σ(pesos)`. Preset P1/P2 peso 1/1 produz média simples; pesos configuráveis por disciplina. |
+| 2026-08-19 | Frequência baseada em unidades de ausência | `absenceUnits` por sessão permite representar aulas duplas/triplas. Aulas canceladas excluídas do cálculo. Percentual mínimo configurável (default 75%). |
+| 2026-08-19 | Valores derivados não são persistidos no banco | `currentAverage`, `attendancePercentage`, `remainingAbsences`, `riskScore` e status/progresso de exercícios são sempre calculados em tempo de leitura pelos serviços de domínio. |
 | 2026-08-19 | Fórmula pós-exame não definida | Exame modelado e detectável (`EXAM_REQUIRED`), mas cálculo final pós-exame aguarda definição das regras institucionais. |
 | 2026-08-19 | Níveis de domínio de tópicos (0 a 4) | Escala de domínio da ementa (0: Não Iniciado, 1: Básico, 2: Razoável, 3: Bom, 4: Dominado) com vínculo opcional a avaliações e horas estimadas de estudo. |
+| 2026-08-19 | Módulo de Exercícios com Histórico de Tentativas e Fotos | Permitir listas de professores, exercícios avulsos, fotos da resolução do caderno via IndexedDB, e cálculo dinâmico de status e progresso. |
+

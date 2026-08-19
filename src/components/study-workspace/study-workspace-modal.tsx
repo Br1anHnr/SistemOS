@@ -47,6 +47,8 @@ import { AnchoredTopicNoteItem } from "@/services/pdf-note-anchor.service";
 import { StudyBoardData } from "@/services/study-board.service";
 import { useToast } from "@/components/ui/toast";
 import { PdfFitMode } from "./pdf-canvas-renderer";
+import { TopicExercisesWorkspaceView } from "@/components/exercise/topic-exercises-workspace-view";
+import { ListChecks } from "lucide-react";
 
 interface StudyWorkspaceModalProps {
   open: boolean;
@@ -57,7 +59,7 @@ interface StudyWorkspaceModalProps {
   materialId?: string | null;
   pdfUrl?: string | null;
   fileName?: string;
-  initialMode?: "PDF" | "BOARD";
+  initialMode?: "PDF" | "BOARD" | "EXERCISES";
   initialNotes?: TopicNoteItem[];
   initialBookmarks?: MaterialBookmarkItem[];
 }
@@ -77,8 +79,9 @@ export function StudyWorkspaceModal({
 }: StudyWorkspaceModalProps) {
   const { toast } = useToast();
 
-  // Mode Switcher: "PDF" or "BOARD"
-  const [workspaceMode, setWorkspaceMode] = React.useState<"PDF" | "BOARD">(initialMode);
+  // Mode Switcher: "PDF" or "BOARD" or "EXERCISES"
+  const [workspaceMode, setWorkspaceMode] = React.useState<"PDF" | "BOARD" | "EXERCISES">(initialMode);
+
 
   // Navigation & View state
   const [zoom, setZoom] = React.useState<number>(100);
@@ -626,6 +629,19 @@ export function StudyWorkspaceModal({
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  data-testid="workspace-mode-exercises"
+                  onClick={() => setWorkspaceMode("EXERCISES")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium ${
+                    workspaceMode === "EXERCISES"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                  <span>Exercícios</span>
+                </button>
               </div>
             </div>
 
@@ -937,6 +953,16 @@ export function StudyWorkspaceModal({
                 </div>
               )}
             </div>
+
+            {/* Left 3: Topic Exercises Area */}
+            <div className={workspaceMode === "EXERCISES" ? "flex-1 relative min-w-0 flex" : "hidden"}>
+              <TopicExercisesWorkspaceView
+                topicId={topicId}
+                topicTitle={topicTitle}
+                subjectId={subjectId}
+              />
+            </div>
+
 
             {/* Right: Collapsible Study Panel */}
             {isPanelOpen && (

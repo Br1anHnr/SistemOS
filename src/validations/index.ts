@@ -549,6 +549,141 @@ export const addPdfRegionToBoardSchema = z.object({
   title: z.string().optional().nullable(),
 });
 
+// ─── Exercises & Lists (Módulo Exercícios) ──────────────────────────────────
+
+export const exerciseStatusSchema = z.enum(
+  ["PENDING", "RESOLVED", "PARTIALLY_CORRECT", "WRONG", "REVIEW"],
+  {
+    errorMap: () => ({ message: "Status do exercício inválido." }),
+  }
+);
+
+export const exerciseAttachmentTypeSchema = z.enum(
+  ["STATEMENT_IMAGE", "STATEMENT_FILE", "REFERENCE", "OTHER"],
+  {
+    errorMap: () => ({ message: "Tipo de anexo inválido." }),
+  }
+);
+
+export const exerciseAttemptResultSchema = z.enum(
+  ["CORRECT", "PARTIALLY_CORRECT", "INCORRECT", "NOT_COMPLETED"],
+  {
+    errorMap: () => ({ message: "Resultado da tentativa inválido." }),
+  }
+);
+
+export const exerciseAttemptAttachmentTypeSchema = z.enum(
+  ["SOLUTION_IMAGE", "CORRECTION_IMAGE", "OTHER"],
+  {
+    errorMap: () => ({ message: "Tipo de anexo da resolução inválido." }),
+  }
+);
+
+export const createExerciseSetSchema = z.object({
+  subjectId: z
+    .string({ required_error: "ID da disciplina é obrigatório." })
+    .uuid("ID de disciplina inválido."),
+  assessmentId: z.string().uuid("ID de avaliação inválido.").optional().nullable(),
+  title: z
+    .string({ required_error: "Título da lista é obrigatório." })
+    .min(1, "O título da lista não pode ficar em branco.")
+    .max(200, "O título da lista deve ter no máximo 200 caracteres."),
+  description: z.string().optional().nullable(),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de entrega deve estar no formato AAAA-MM-DD.")
+    .optional()
+    .nullable(),
+  sourceFileName: z.string().max(255).optional().nullable(),
+  sourceFileUrl: z.string().optional().nullable(),
+  sourceFileType: z.string().max(50).optional().nullable(),
+});
+
+export const updateExerciseSetSchema = createExerciseSetSchema
+  .omit({ subjectId: true })
+  .partial();
+
+export const createExerciseSchema = z.object({
+  subjectId: z
+    .string({ required_error: "ID da disciplina é obrigatório." })
+    .uuid("ID de disciplina inválido."),
+  exerciseSetId: z.string().uuid("ID da lista inválido.").optional().nullable(),
+  topicId: z.string().uuid("ID do tópico/capítulo inválido.").optional().nullable(),
+  title: z
+    .string({ required_error: "Título do exercício é obrigatório." })
+    .min(1, "O título do exercício não pode ficar em branco.")
+    .max(200, "O título do exercício deve ter no máximo 200 caracteres."),
+  referenceNumber: z.string().max(50).optional().nullable(),
+  statement: z.string().optional().nullable(),
+  source: z.string().max(200).optional().nullable(),
+  sourcePage: z.number().int().min(1).optional().nullable(),
+  difficulty: z.number().int().min(1).max(5).default(3).optional().nullable(),
+  needsReview: z.boolean().default(false).optional(),
+  orderIndex: z.number().int().default(0).optional(),
+  statementImages: z
+    .array(
+      z.object({
+        filePath: z.string(),
+        mimeType: z.string().default("image/png"),
+        originalName: z.string(),
+        caption: z.string().optional().nullable(),
+      })
+    )
+    .optional(),
+});
+
+export const updateExerciseSchema = createExerciseSchema
+  .omit({ subjectId: true })
+  .partial();
+
+export const createExerciseAttemptSchema = z.object({
+  exerciseId: z
+    .string({ required_error: "ID do exercício é obrigatório." })
+    .uuid("ID de exercício inválido."),
+  attemptedAt: z.string().datetime().optional().nullable(),
+  result: exerciseAttemptResultSchema,
+  durationMinutes: z.number().int().min(0).optional().nullable(),
+  difficultyPerceived: z.number().int().min(1).max(5).optional().nullable(),
+  notes: z.string().optional().nullable(),
+  needsReview: z.boolean().default(false),
+  attachments: z
+    .array(
+      z.object({
+        type: exerciseAttemptAttachmentTypeSchema.default("SOLUTION_IMAGE"),
+        filePath: z.string(),
+        mimeType: z.string().default("image/png"),
+        originalName: z.string(),
+        caption: z.string().optional().nullable(),
+      })
+    )
+    .optional(),
+});
+
+export const createExerciseAttachmentSchema = z.object({
+  exerciseId: z
+    .string({ required_error: "ID do exercício é obrigatório." })
+    .uuid("ID de exercício inválido."),
+  type: exerciseAttachmentTypeSchema.default("STATEMENT_IMAGE"),
+  filePath: z.string({ required_error: "Caminho do arquivo é obrigatório." }),
+  mimeType: z.string().max(100).default("image/png"),
+  originalName: z.string().max(255),
+  caption: z.string().optional().nullable(),
+  orderIndex: z.number().int().default(0),
+});
+
+export const createAttemptAttachmentSchema = z.object({
+  attemptId: z
+    .string({ required_error: "ID da tentativa é obrigatório." })
+    .uuid("ID de tentativa inválido."),
+  type: exerciseAttemptAttachmentTypeSchema.default("SOLUTION_IMAGE"),
+  filePath: z.string({ required_error: "Caminho da foto é obrigatório." }),
+  mimeType: z.string().max(100).default("image/png"),
+  originalName: z.string().max(255),
+  caption: z.string().optional().nullable(),
+  orderIndex: z.number().int().default(0),
+});
+
+
 
 
 

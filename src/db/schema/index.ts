@@ -29,3 +29,15 @@ export {
   studyBoardItems,
   studyBoardItemTypeEnum,
 } from "./study-board";
+export {
+  exerciseSets,
+  exercises,
+  exerciseAttachments,
+  exerciseAttempts,
+  exerciseAttemptAttachments,
+  exerciseStatusEnum,
+  exerciseAttachmentTypeEnum,
+  exerciseAttemptResultEnum,
+  exerciseAttemptAttachmentTypeEnum,
+} from "./exercise";
+

@@ -43,6 +43,7 @@ import {
   Bookmark,
   PenLine,
   LayoutGrid,
+  ListChecks,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -112,7 +113,7 @@ export function SubjectTopicsTab({
 
   // Study Workspace state (Integrated PDF + Study Panel)
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
-  const [workspaceInitialMode, setWorkspaceInitialMode] = React.useState<"PDF" | "BOARD">("PDF");
+  const [workspaceInitialMode, setWorkspaceInitialMode] = React.useState<"PDF" | "BOARD" | "EXERCISES">("PDF");
   const [workspaceTopic, setWorkspaceTopic] = React.useState<TopicWithAssessment | null>(null);
   const [workspaceMaterial, setWorkspaceMaterial] = React.useState<SubjectMaterialItem | null>(null);
 
@@ -301,7 +302,7 @@ export function SubjectTopicsTab({
     setPdfViewerOpen(true);
   };
 
-  const handleOpenStudyWorkspace = (topic: TopicWithAssessment, mode: "PDF" | "BOARD" = "PDF") => {
+  const handleOpenStudyWorkspace = (topic: TopicWithAssessment, mode: "PDF" | "BOARD" | "EXERCISES" = "PDF") => {
     const linked =
       materialsByTopicId.get(topic.id) ||
       materials.find(
@@ -598,6 +599,20 @@ export function SubjectTopicsTab({
                           Lousa
                         </button>
 
+                        {/* EXERCÍCIOS BUTTON */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudyWorkspace(parent, "EXERCISES");
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-purple-800/80 text-purple-300 hover:text-white hover:bg-purple-950/40 transition-colors"
+                          title="Abrir Exercícios deste capítulo"
+                        >
+                          <ListChecks className="h-3 w-3" />
+                          Exercícios
+                        </button>
+
                         {/* VER PDF STANDALONE BUTTON */}
                         {linkedMaterial && (
                           <button
@@ -829,6 +844,16 @@ export function SubjectTopicsTab({
                               >
                                 <LayoutGrid className="h-2.5 w-2.5" />
                                 Lousa
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStudyWorkspace(sub as any, "EXERCISES")}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-purple-800/60 text-purple-300 hover:text-white hover:bg-purple-950/40"
+                                title="Abrir Exercícios deste subtópico"
+                              >
+                                <ListChecks className="h-2.5 w-2.5" />
+                                Exercícios
                               </button>
 
                               {sub.assessmentTitle && (

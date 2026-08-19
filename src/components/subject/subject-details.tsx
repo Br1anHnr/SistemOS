@@ -36,10 +36,12 @@ import {
   TopicWithAssessment,
   SubjectMaterialItem,
 } from "@/components/subject/subject-topics-tab";
+import { SubjectExercisesTab } from "@/components/exercise/subject-exercises-tab";
 import { SubjectModal } from "@/components/subject/subject-modal";
 import { deleteSubjectAction } from "@/actions/subject.actions";
 import { useToast } from "@/components/ui/toast";
 import { formatScheduleSlot } from "@/lib/date-utils";
+import { ListChecks } from "lucide-react";
 
 export interface SubjectDetailsData {
   id: string;
@@ -182,6 +184,10 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
             <FileText className="h-3.5 w-3.5 mr-1.5" />
             Conteúdos ({subject.topics?.length || 0})
           </TabsTrigger>
+          <TabsTrigger value="exercises">
+            <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+            Exercícios
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -300,6 +306,17 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
             subjectCode={subject.code}
             topics={subject.topics || []}
             materials={subject.materials || []}
+            assessments={assessmentOptions}
+          />
+        </TabsContent>
+
+        {/* Exercises Tab */}
+        <TabsContent value="exercises">
+          <SubjectExercisesTab
+            key={subject.id}
+            subjectId={subject.id}
+            subjectName={subject.name}
+            topics={subject.topics || []}
             assessments={assessmentOptions}
           />
         </TabsContent>

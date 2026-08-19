@@ -46,11 +46,8 @@ import {
   ChevronDown,
   ChevronRight,
   Sparkles,
-  Flame,
   Award,
-  Filter,
   Layers,
-  FolderOpen,
   Eye,
   Upload,
 } from "lucide-react";
@@ -102,7 +99,6 @@ export function SubjectTopicsTab({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const pdfInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Modals state
   const [topicModalOpen, setTopicModalOpen] = React.useState(false);
@@ -119,10 +115,6 @@ export function SubjectTopicsTab({
   // Accordion expanded state for parent modules
   const [expandedParents, setExpandedParents] = React.useState<Record<string, boolean>>({});
 
-  // Filters
-  const [statusFilter, setStatusFilter] = React.useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
-  const [assessmentFilter, setAssessmentFilter] = React.useState<string>("ALL");
-
   // Domain calculations
   const progress = React.useMemo(() => calculateTopicProgress(topics), [topics]);
   const mastery = React.useMemo(() => calculateMasteryAverage(topics), [topics]);
@@ -131,6 +123,15 @@ export function SubjectTopicsTab({
 
   // Hierarchical Tree
   const topicTree = React.useMemo(() => buildTopicTree(topics), [topics]);
+
+  // Map materials to topicId
+  const materialsByTopicId = React.useMemo(() => {
+    const map = new Map<string, SubjectMaterialItem>();
+    for (const m of materials) {
+      if (m.topicId) map.set(m.topicId, m);
+    }
+    return map;
+  }, [materials]);
 
   // Parent topics list for modal dropdown
   const parentOptions = React.useMemo(() => {
@@ -225,36 +226,7 @@ export function SubjectTopicsTab({
     }
   };
 
-  // Upload and open PDF in in-app reader
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const objectUrl = URL.createObjectURL(file);
-
-      // Save material to database
-      try {
-        await createMaterialAction({
-          subjectId,
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          fileName: file.name,
-          fileType: "PDF",
-          fileUrl: objectUrl,
-          fileSize: file.size,
-        });
-      } catch {
-        // Silently continue to open viewer
-      }
-
-      // Open in built-in reader
-      setActivePdfUrl(objectUrl);
-      setActivePdfTitle(file.name.replace(/\.[^/.]+$/, ""));
-      setActivePdfFileName(file.name);
-      setPdfViewerOpen(true);
-      router.refresh();
-    }
-  };
-
-  const handleOpenExistingPdf = (material: SubjectMaterialItem) => {
+  const handleOpenPdf = (material: SubjectMaterialItem) => {
     setActivePdfUrl(material.fileUrl);
     setActivePdfTitle(material.title);
     setActivePdfFileName(material.fileName);
@@ -340,60 +312,36 @@ export function SubjectTopicsTab({
         <div>
           <h3 className="text-sm font-semibold text-neutral-100 flex items-center gap-2">
             <Layers className="h-4 w-4 text-purple-400" />
-            Ementa & Conteúdos da Disciplina ({topics.length})
+            Aulas & Conteúdos da Disciplina ({topics.length})
           </h3>
           <p className="text-xs text-neutral-400">
-            Organize módulos e subconteúdos específicos e consulte os slides e PDFs da aula no leitor integrado.
+            Cadastre suas aulas enviando os slides ou crie tópicos e subconteúdos para estudar.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* PDF In-App Reader Button */}
-          <input
-            ref={pdfInputRef}
-            type="file"
-            accept=".pdf"
-            onChange={handlePdfUpload}
-            className="hidden"
-          />
-
+          {/* Main Add Lecture / Material Button */}
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (materials.length > 0) {
-                handleOpenExistingPdf(materials[0]);
-              } else {
-                pdfInputRef.current?.click();
-              }
-            }}
-            className="text-xs border-purple-800/60 bg-purple-950/20 text-purple-300 hover:bg-purple-950/40"
-          >
-            <Eye className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
-            {materials.length > 0 ? `Ver Slides / PDF (${materials.length})` : "Abrir PDF da Aula"}
-          </Button>
-
-          <Button
-            variant="outline"
             size="sm"
             onClick={() => setBatchModalOpen(true)}
-            className="text-xs border-neutral-750"
+            className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium"
           >
-            <Wand2 className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
-            Importar Ementa
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Adicionar Aula / PDF
           </Button>
 
+          {/* New Topic Manual Button */}
           <Button
+            variant="outline"
             size="sm"
             onClick={() => {
               setEditingTopic(null);
               setTargetParentId(null);
               setTopicModalOpen(true);
             }}
-            className="text-xs"
+            className="text-xs border-neutral-750"
           >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Novo Tópico
+            Novo Tópico Manual
           </Button>
         </div>
       </div>
@@ -403,30 +351,30 @@ export function SubjectTopicsTab({
         <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-3">
           <FileText className="h-8 w-8 text-neutral-500 mx-auto" />
           <h4 className="text-sm font-semibold text-neutral-200">
-            Nenhum conteúdo cadastrado
+            Nenhuma aula ou conteúdo cadastrado
           </h4>
           <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-            Arraste o arquivo PDF da disciplina para extrair os tópicos automaticamente ou crie módulos e subconteúdos manualmente.
+            Clique em <strong>Adicionar Aula / PDF</strong> para enviar os slides da matéria (ex: <em>Aula 01</em>, <em>Aula 02</em>) e ler o material diretamente aqui dentro.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <Button
               size="sm"
-              variant="outline"
               onClick={() => setBatchModalOpen(true)}
+              className="bg-purple-600 hover:bg-purple-500 text-white"
             >
-              <Wand2 className="h-3.5 w-3.5 mr-1" />
-              Importar Ementa
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Adicionar Aula / PDF
             </Button>
             <Button
               size="sm"
+              variant="outline"
               onClick={() => {
                 setEditingTopic(null);
                 setTargetParentId(null);
                 setTopicModalOpen(true);
               }}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Adicionar Módulo / Tópico
+              Criar Tópico Manual
             </Button>
           </div>
         </div>
@@ -438,12 +386,17 @@ export function SubjectTopicsTab({
             const isParentCompleted =
               parent.status === "COMPLETED" || parent.masteryLevel === 4;
 
+            // Check if there is an attached material
+            const linkedMaterial =
+              materialsByTopicId.get(parent.id) ||
+              materials.find((m) => m.title === parent.title || m.fileName.includes(parent.title));
+
             return (
               <div
                 key={parent.id}
                 className="rounded-xl border border-neutral-800 bg-neutral-950/60 overflow-hidden shadow-sm"
               >
-                {/* Parent Module Header */}
+                {/* Parent Header */}
                 <div
                   className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-3.5 transition-colors ${
                     hasSubtopics
@@ -454,7 +407,7 @@ export function SubjectTopicsTab({
                   }`}
                   onClick={() => hasSubtopics && toggleExpand(parent.id)}
                 >
-                  {/* Left: Expand Chevron + Checkbox + Title */}
+                  {/* Left: Chevron + Checkbox + Title */}
                   <div className="flex items-center gap-2.5 min-w-0">
                     {hasSubtopics ? (
                       <button
@@ -493,6 +446,22 @@ export function SubjectTopicsTab({
                           {parent.title}
                         </span>
 
+                        {/* In-App PDF Reader Button */}
+                        {linkedMaterial && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPdf(linkedMaterial);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition-colors"
+                            title="Abrir PDF no leitor integrado"
+                          >
+                            <Eye className="h-3 w-3" />
+                            Ver PDF
+                          </button>
+                        )}
+
                         {hasSubtopics && (
                           <Badge
                             variant="secondary"
@@ -514,7 +483,7 @@ export function SubjectTopicsTab({
                       </div>
 
                       {parent.description && (
-                        <p className="text-xs text-neutral-400 mt-0.5">
+                        <p className="text-xs text-neutral-400 mt-0.5 truncate max-w-md">
                           {parent.description}
                         </p>
                       )}
@@ -536,13 +505,13 @@ export function SubjectTopicsTab({
                         setTopicModalOpen(true);
                       }}
                       className="h-7 text-xs px-2 text-purple-300 hover:text-purple-200 hover:bg-purple-950/30"
-                      title="Adicionar subconteúdo a este módulo"
+                      title="Adicionar subconteúdo a esta aula"
                     >
                       <Plus className="h-3 w-3 mr-1" />
                       Subtópico
                     </Button>
 
-                    {/* Mastery Level (only for leaf parents without subtopics) */}
+                    {/* Mastery Level */}
                     {!hasSubtopics && (
                       <div className="flex items-center gap-1">
                         {MASTERY_LEVELS.map((lvl) => {
@@ -587,14 +556,14 @@ export function SubjectTopicsTab({
                           setTopicModalOpen(true);
                         }}
                         className="p-1 hover:text-neutral-200"
-                        title="Editar Módulo"
+                        title="Editar"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(parent.id, parent.title)}
                         className="p-1 hover:text-red-400"
-                        title="Excluir Módulo"
+                        title="Excluir"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -689,11 +658,7 @@ export function SubjectTopicsTab({
                               </button>
                               <button
                                 onClick={() =>
-                                  handleMove(
-                                    parent.subtopics as any,
-                                    sIndex,
-                                    "DOWN"
-                                  )
+                                  handleMove(parent.subtopics as any, sIndex, "DOWN")
                                 }
                                 disabled={sIndex === parent.subtopics.length - 1}
                                 className="p-1 hover:text-neutral-200 disabled:opacity-30"

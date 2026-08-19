@@ -17,31 +17,19 @@ import {
   batchCreateTopicsAction,
 } from "@/actions/topic.actions";
 import { createMaterialAction } from "@/actions/material.actions";
-import { parseSyllabusFileAction } from "@/actions/syllabus-file.actions";
-import {
-  parseSyllabusText,
-  deriveModuleTitleFromFileName,
-} from "@/domain/topics/syllabus-parser";
+import { deriveModuleTitleFromFileName } from "@/domain/topics/syllabus-parser";
+import { MASTERY_LEVELS } from "@/domain/topics";
 import {
   Loader2,
-  Wand2,
   UploadCloud,
   FileText,
-  Trash2,
   Plus,
   CheckCircle2,
-  CheckSquare,
-  Square,
   Sparkles,
   Layers,
-  BookOpen,
+  Award,
+  Clock,
 } from "lucide-react";
-
-interface TopicDraftItem {
-  id: string;
-  title: string;
-  selected: boolean;
-}
 
 interface BatchTopicModalProps {
   open: boolean;
@@ -66,149 +54,43 @@ export function BatchTopicModal({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [mode, setMode] = React.useState<"FILE" | "TEXT">("FILE");
-  const [importStructure, setImportStructure] = React.useState<
-    "MODULE_WITH_SUBTOPICS" | "FLAT_TOPICS"
-  >("MODULE_WITH_SUBTOPICS");
-
   const [loading, setLoading] = React.useState(false);
-  const [extracting, setExtracting] = React.useState(false);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Module name if creating module with subtopics
-  const [moduleTitle, setModuleTitle] = React.useState<string>("");
-
-  // Parsed / extracted topics list with selection status
-  const [topicDrafts, setTopicDrafts] = React.useState<TopicDraftItem[]>([]);
-  const [sourceFileName, setSourceFileName] = React.useState<string | null>(null);
-  const [uploadedBlobUrl, setUploadedBlobUrl] = React.useState<string | null>(null);
-  const [newTopicInput, setNewTopicInput] = React.useState("");
-
-  // Manual text mode
-  const [rawText, setRawText] = React.useState("");
-
-  // Assessment linking
+  // Selected file details
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [lessonTitle, setLessonTitle] = React.useState<string>("");
+  const [description, setDescription] = React.useState<string>("");
+  const [masteryLevel, setMasteryLevel] = React.useState<number>(0);
+  const [importance, setImportance] = React.useState<number>(3);
+  const [estimatedHours, setEstimatedHours] = React.useState<string>("");
   const [assessmentId, setAssessmentId] = React.useState<string>("");
+
+  // Manual text mode for pasting full syllabus list
+  const [rawText, setRawText] = React.useState("");
 
   React.useEffect(() => {
     setMode("FILE");
-    setImportStructure("MODULE_WITH_SUBTOPICS");
-    setTopicDrafts([]);
-    setSourceFileName(null);
-    setUploadedBlobUrl(null);
-    setModuleTitle("");
-    setRawText("");
-    setNewTopicInput("");
+    setSelectedFile(null);
+    setLessonTitle("");
+    setDescription("");
+    setMasteryLevel(0);
+    setImportance(3);
+    setEstimatedHours("");
     setAssessmentId("");
+    setRawText("");
     setError(null);
   }, [open]);
 
-  const setTopicsFromList = (titles: string[], fileName: string, blobUrl?: string) => {
-    const drafts: TopicDraftItem[] = titles.map((t, idx) => ({
-      id: `${Date.now()}-${idx}`,
-      title: t,
-      selected: true,
-    }));
-    setTopicDrafts(drafts);
-    setSourceFileName(fileName);
-    setModuleTitle(deriveModuleTitleFromFileName(fileName));
-    if (blobUrl) setUploadedBlobUrl(blobUrl);
-  };
-
   // Handle file drop or selection
-  const handleProcessFile = async (file: File) => {
+  const handleProcessFile = (file: File) => {
     setError(null);
-    setExtracting(true);
+    setSelectedFile(file);
 
-    try {
-      const fileName = file.name.toLowerCase();
-      const objectUrl = URL.createObjectURL(file);
-
-      // Save material record silently for the in-app PDF reader
-      try {
-        await createMaterialAction({
-          subjectId,
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          fileName: file.name,
-          fileType: "PDF",
-          fileUrl: objectUrl,
-          fileSize: file.size,
-        });
-      } catch {
-        // Silently continue
-      }
-
-      // 1. Client-side quick reading for text-based files
-      if (
-        fileName.endsWith(".txt") ||
-        fileName.endsWith(".md") ||
-        fileName.endsWith(".markdown") ||
-        fileName.endsWith(".csv")
-      ) {
-        const text = await file.text();
-        const extracted = parseSyllabusText(text, {
-          subjectName,
-          subjectCode,
-          fileName: file.name,
-        });
-
-        if (extracted.length === 0) {
-          setError("Nenhum tópico programático identificado no arquivo.");
-          setExtracting(false);
-          return;
-        }
-
-        setTopicsFromList(extracted, file.name, objectUrl);
-        setExtracting(false);
-        return;
-      }
-
-      // 2. Client-side extraction for PDF files (instant & avoids network size limits)
-      if (fileName.endsWith(".pdf")) {
-        try {
-          const { extractText } = await import("unpdf");
-          const arrayBuffer = await file.arrayBuffer();
-          const pdfData = await extractText(new Uint8Array(arrayBuffer));
-          const textContent = Array.isArray(pdfData.text)
-            ? pdfData.text.join("\n")
-            : (pdfData.text as string) || "";
-
-          if (textContent && textContent.trim().length > 0) {
-            const extracted = parseSyllabusText(textContent, {
-              subjectName,
-              subjectCode,
-              fileName: file.name,
-            });
-
-            if (extracted.length > 0) {
-              setTopicsFromList(extracted, file.name, objectUrl);
-              setExtracting(false);
-              return;
-            }
-          }
-        } catch {
-          // If browser worker fails, fallback to server action below
-        }
-      }
-
-      // 3. Server-side extraction fallback
-      const formData = new FormData();
-      formData.append("file", file);
-      if (subjectName) formData.append("subjectName", subjectName);
-      if (subjectCode) formData.append("subjectCode", subjectCode);
-
-      const res = await parseSyllabusFileAction(formData);
-
-      if (!res.success || !res.topics) {
-        setError(res.error || "Erro ao extrair tópicos do arquivo.");
-      } else {
-        setTopicsFromList(res.topics, res.fileName || file.name, objectUrl);
-      }
-    } catch {
-      setError("Erro ao ler o arquivo enviado. Tente outro formato ou cole o texto na aba ao lado.");
-    } finally {
-      setExtracting(false);
-    }
+    // Derive a clean, elegant title from filename (e.g. "Aula 02: Conceitos Fundamentais...")
+    const derived = deriveModuleTitleFromFileName(file.name);
+    setLessonTitle(derived);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -238,114 +120,74 @@ export function BatchTopicModal({
     }
   };
 
-  const handleToggleSelect = (index: number) => {
-    setTopicDrafts((prev) =>
-      prev.map((item, i) =>
-        i === index ? { ...item, selected: !item.selected } : item
-      )
-    );
-  };
-
-  const handleSelectAll = (select: boolean) => {
-    setTopicDrafts((prev) =>
-      prev.map((item) => ({ ...item, selected: select }))
-    );
-  };
-
-  const handleUpdateTopicTitle = (index: number, newTitle: string) => {
-    setTopicDrafts((prev) =>
-      prev.map((item, i) =>
-        i === index ? { ...item, title: newTitle } : item
-      )
-    );
-  };
-
-  const handleRemoveTopic = (index: number) => {
-    setTopicDrafts((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAddManualTopic = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTopicInput.trim().length > 0) {
-      setTopicDrafts((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-${prev.length}`,
-          title: newTopicInput.trim(),
-          selected: true,
-        },
-      ]);
-      setNewTopicInput("");
-    }
-  };
-
-  // Convert rawText in manual mode
-  const handleParseManualText = () => {
-    const extracted = parseSyllabusText(rawText, {
-      subjectName,
-      subjectCode,
-    });
-    if (extracted.length === 0) {
-      setError("Nenhum tópico válido encontrado no texto.");
-      return;
-    }
-    setTopicsFromList(extracted, "Texto colado manualmente");
-  };
-
-  const selectedCount = topicDrafts.filter((t) => t.selected).length;
-
-  // Submit selected topics to database
+  // Submit action
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedTopics = topicDrafts
-      .filter((t) => t.selected)
-      .map((t) => t.title.trim())
-      .filter((t) => t.length > 0);
-
-    if (selectedTopics.length === 0) {
-      setError("Selecione pelo menos um conteúdo para cadastrar.");
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      if (importStructure === "MODULE_WITH_SUBTOPICS") {
-        // 1. Create parent module
-        const parentRes = await createTopicAction({
-          subjectId,
-          title: moduleTitle.trim() || "Módulo de Aula",
-          description: sourceFileName ? `Material: ${sourceFileName}` : null,
-          masteryLevel: 0,
-          importance: 3,
-          assessmentId: assessmentId || null,
-        });
-
-        if (!parentRes.success || !parentRes.data) {
-          setError(parentRes.error || "Erro ao criar módulo da aula.");
+      if (mode === "FILE") {
+        if (!selectedFile || !lessonTitle.trim()) {
+          setError("Selecione um arquivo e defina o nome da aula.");
           setLoading(false);
           return;
         }
 
-        const parentId = parentRes.data.id;
+        const parsedHours = estimatedHours !== "" ? Number(estimatedHours) : null;
 
-        // 2. Batch create subtopics under this parent
-        const joinedText = selectedTopics.join("\n");
-        await batchCreateTopicsAction({
+        // 1. Create Topic in database
+        const topicRes = await createTopicAction({
           subjectId,
-          parentId,
-          rawText: joinedText,
+          title: lessonTitle.trim(),
+          description: description.trim() || `Material: ${selectedFile.name}`,
+          masteryLevel: Number(masteryLevel),
+          importance: Number(importance),
+          estimatedHours: parsedHours,
           assessmentId: assessmentId || null,
         });
 
-        toast(`Módulo "${moduleTitle}" e ${selectedTopics.length} subconteúdos criados!`);
+        if (!topicRes.success || !topicRes.data) {
+          setError(topicRes.error || "Erro ao criar aula.");
+          setLoading(false);
+          return;
+        }
+
+        const createdTopicId = topicRes.data.id;
+        const objectUrl = URL.createObjectURL(selectedFile);
+
+        // 2. Attach PDF material to this created topic
+        try {
+          await createMaterialAction({
+            subjectId,
+            topicId: createdTopicId,
+            title: lessonTitle.trim(),
+            fileName: selectedFile.name,
+            fileType: "PDF",
+            fileUrl: objectUrl,
+            fileSize: selectedFile.size,
+          });
+        } catch {
+          // Continue if material index succeeds locally
+        }
+
+        toast(`Aula "${lessonTitle}" cadastrada e PDF anexado com sucesso!`);
       } else {
-        // Flat topics
-        const joinedText = selectedTopics.join("\n");
+        // Mode TEXT (Batch syllabus pasting)
+        const lines = rawText
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+
+        if (lines.length === 0) {
+          setError("Cole pelo menos um tópico de ementa.");
+          setLoading(false);
+          return;
+        }
+
         const res = await batchCreateTopicsAction({
           subjectId,
-          rawText: joinedText,
+          rawText,
           assessmentId: assessmentId || null,
         });
 
@@ -361,7 +203,7 @@ export function BatchTopicModal({
       onOpenChange(false);
       onSuccess?.();
     } catch {
-      setError("Erro inesperado ao salvar tópicos.");
+      setError("Erro inesperado ao salvar aula.");
     } finally {
       setLoading(false);
     }
@@ -372,11 +214,11 @@ export function BatchTopicModal({
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5 text-purple-400" />
-            Importar Ementa e Slides de Aula
+            <FileText className="h-5 w-5 text-purple-400" />
+            Adicionar Aula / Material de Estudo
           </DialogTitle>
           <DialogDescription>
-            Arraste os slides da aula (PDF) ou a ementa da matéria para extrair os tópicos e subconteúdos.
+            Envie os slides ou PDF da aula para criar o conteúdo e anexar o material para leitura integrada.
           </DialogDescription>
         </DialogHeader>
 
@@ -386,300 +228,229 @@ export function BatchTopicModal({
           </div>
         )}
 
-        {/* Mode Selector Tabs (only if no topics extracted yet) */}
-        {topicDrafts.length === 0 && (
-          <div className="flex rounded-lg bg-neutral-900 border border-neutral-800 p-0.5 mb-4 text-xs">
-            <button
-              type="button"
-              onClick={() => setMode("FILE")}
-              className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
-                mode === "FILE"
-                  ? "bg-neutral-800 text-white font-semibold shadow-sm"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              Arrastar Slides / PDF da Aula
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("TEXT")}
-              className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
-                mode === "TEXT"
-                  ? "bg-neutral-800 text-white font-semibold shadow-sm"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              Colar Sumário / Texto
-            </button>
-          </div>
-        )}
+        {/* Mode Selector Tabs */}
+        <div className="flex rounded-lg bg-neutral-900 border border-neutral-800 p-0.5 mb-4 text-xs">
+          <button
+            type="button"
+            onClick={() => setMode("FILE")}
+            className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
+              mode === "FILE"
+                ? "bg-neutral-800 text-white font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            Enviar Slides / PDF da Aula
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("TEXT")}
+            className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
+              mode === "TEXT"
+                ? "bg-neutral-800 text-white font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            Colar Ementa em Texto
+          </button>
+        </div>
 
-        <div className="space-y-4 text-sm">
-          {/* STATE 1: Dropzone File Mode (No topics yet) */}
-          {topicDrafts.length === 0 && mode === "FILE" && (
-            <div>
+        <div className="space-y-4 text-sm max-h-[62vh] overflow-y-auto pr-1">
+          {/* FILE MODE */}
+          {mode === "FILE" && (
+            <div className="space-y-3.5">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,.md,.markdown,.csv"
+                accept=".pdf,.txt,.md,.markdown"
                 onChange={handleFileInputChange}
                 className="hidden"
               />
 
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
-                  isDragOver
-                    ? "border-purple-500 bg-purple-950/20 scale-[1.01]"
-                    : "border-neutral-800 hover:border-neutral-700 bg-neutral-950/60"
-                }`}
-              >
-                {extracting ? (
-                  <div className="text-center space-y-2 py-4">
-                    <Loader2 className="h-10 w-10 text-purple-400 animate-spin mx-auto" />
-                    <p className="text-xs font-semibold text-neutral-200">
-                      Analisando slides da aula e identificando tópicos...
-                    </p>
-                    <p className="text-[11px] text-neutral-400">
-                      Filtrando parágrafos explicativos e isolando títulos dos slides.
-                    </p>
-                  </div>
-                ) : (
+              {!selectedFile ? (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                    isDragOver
+                      ? "border-purple-500 bg-purple-950/20 scale-[1.01]"
+                      : "border-neutral-800 hover:border-neutral-700 bg-neutral-950/60"
+                  }`}
+                >
                   <div className="text-center space-y-2.5">
                     <div className="h-12 w-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center mx-auto text-purple-400">
                       <UploadCloud className="h-6 w-6" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-neutral-100">
-                        Arraste o PDF da aula ou ementa aqui
+                        Arraste o PDF da aula aqui
                       </p>
                       <p className="text-xs text-neutral-400 mt-0.5">
                         ou clique para selecionar do seu computador
                       </p>
                     </div>
-                    <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-neutral-400">
-                      <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 font-mono">
+                    <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-neutral-400 font-mono">
+                      <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                         .PDF
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 font-mono">
+                      <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                         .TXT
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 font-mono">
-                        .MD
-                      </span>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STATE 2: Manual Text Mode (No topics yet) */}
-          {topicDrafts.length === 0 && mode === "TEXT" && (
-            <div className="space-y-3">
-              <textarea
-                rows={8}
-                value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
-                placeholder={`Cole o sumário ou ementa aqui...\nExemplo:\n1. Características e Propriedades dos Fluidos\n2. Viscosidade Dinâmica e Cinemática\n3. Tensão Superficial e Capilaridade\n4. Pressão de Vapor e Cavitação`}
-                className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs font-mono text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
-                autoFocus
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleParseManualText}
-                disabled={rawText.trim().length === 0}
-                className="w-full text-xs"
-              >
-                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-purple-400" />
-                Extrair Tópicos
-              </Button>
-            </div>
-          )}
-
-          {/* STATE 3: Extracted Topics Preview & Hierarchy Config */}
-          {topicDrafts.length > 0 && (
-            <div className="space-y-4">
-              {/* Structure Choice Selector */}
-              <div className="p-3 rounded-lg bg-neutral-900/70 border border-neutral-800 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5 text-purple-400" />
-                    Como organizar estes conteúdos:
-                  </label>
                 </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {/* File Attached Pill */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-neutral-900/80 border border-neutral-800">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-2 rounded-md bg-purple-950/60 border border-purple-800 text-purple-400 shrink-0">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-neutral-200 truncate">
+                          {selectedFile.name}
+                        </div>
+                        <div className="text-[11px] text-neutral-400">
+                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • PDF de Aula
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedFile(null)}
+                      className="h-7 text-xs text-neutral-400 hover:text-white"
+                    >
+                      Trocar arquivo
+                    </Button>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setImportStructure("MODULE_WITH_SUBTOPICS")}
-                    className={`p-2.5 rounded-lg border text-left transition-all ${
-                      importStructure === "MODULE_WITH_SUBTOPICS"
-                        ? "bg-purple-950/30 border-purple-700 text-purple-200"
-                        : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                    }`}
-                  >
-                    <div className="text-xs font-semibold text-neutral-100">
-                      Criar 1 Módulo de Aula
-                    </div>
-                    <div className="text-[10px] text-neutral-400 mt-0.5">
-                      Cria o capítulo principal e salva os itens abaixo como subtópicos.
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setImportStructure("FLAT_TOPICS")}
-                    className={`p-2.5 rounded-lg border text-left transition-all ${
-                      importStructure === "FLAT_TOPICS"
-                        ? "bg-purple-950/30 border-purple-700 text-purple-200"
-                        : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                    }`}
-                  >
-                    <div className="text-xs font-semibold text-neutral-100">
-                      Tópicos Independentes
-                    </div>
-                    <div className="text-[10px] text-neutral-400 mt-0.5">
-                      Cadastra cada item como um tópico separado da ementa geral.
-                    </div>
-                  </button>
-                </div>
-
-                {importStructure === "MODULE_WITH_SUBTOPICS" && (
-                  <div className="pt-1">
-                    <label className="block text-[11px] font-medium text-neutral-400 mb-1">
-                      Título do Módulo / Capítulo da Aula:
+                  {/* Lesson Title Input */}
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                      Nome da Aula / Conteúdo *
                     </label>
                     <Input
-                      value={moduleTitle}
-                      onChange={(e) => setModuleTitle(e.target.value)}
-                      placeholder="Ex: Capítulo 2: Conceitos Fundamentais e Propriedades"
-                      className="text-xs bg-neutral-950 border-neutral-800"
+                      value={lessonTitle}
+                      onChange={(e) => setLessonTitle(e.target.value)}
+                      placeholder="Ex: Aula 01: Introdução aos Fenômenos de Transporte"
+                      required
+                      autoFocus
+                    />
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Você pode renomear livremente (ex: <em>Aula 01: ...</em>, <em>Capítulo 2: ...</em>).
+                    </p>
+                  </div>
+
+                  {/* Description / Notes */}
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                      Descrição / Anotações Rápidas (opcional)
+                    </label>
+                    <Input
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Ex: Leitura dos slides 1 a 30, exercícios recomendados"
                     />
                   </div>
-                )}
-              </div>
 
-              {/* Subtopics Header & Batch Select */}
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-neutral-950 border border-neutral-850">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  <span className="text-xs font-semibold text-neutral-200">
-                    {selectedCount} de {topicDrafts.length} conteúdos selecionados
-                  </span>
-                </div>
+                  {/* Settings Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                        Nível de Domínio Inicial
+                      </label>
+                      <Select
+                        value={masteryLevel.toString()}
+                        onChange={(e) => setMasteryLevel(Number(e.target.value))}
+                      >
+                        {MASTERY_LEVELS.map((m) => (
+                          <option key={m.level} value={m.level.toString()}>
+                            {m.level} — {m.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectAll(selectedCount !== topicDrafts.length)}
-                    className="text-[11px] text-neutral-400 hover:text-neutral-200 underline decoration-neutral-700"
-                  >
-                    {selectedCount === topicDrafts.length
-                      ? "Desmarcar todos"
-                      : "Selecionar todos"}
-                  </button>
-                  <span className="text-neutral-700">|</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setTopicDrafts([]);
-                      setSourceFileName(null);
-                    }}
-                    className="h-6 text-[11px] text-neutral-400 hover:text-white p-1"
-                  >
-                    Trocar arquivo
-                  </Button>
-                </div>
-              </div>
-
-              {/* Scrollable list of detected topics */}
-              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                {topicDrafts.map((draft, idx) => (
-                  <div
-                    key={draft.id}
-                    className={`flex items-center justify-between gap-2 p-1.5 px-2.5 rounded border transition-colors ${
-                      draft.selected
-                        ? "bg-neutral-900/80 border-neutral-800"
-                        : "bg-neutral-950/40 border-neutral-900 opacity-50"
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleSelect(idx)}
-                      className="text-neutral-400 hover:text-white shrink-0"
-                    >
-                      {draft.selected ? (
-                        <CheckSquare className="h-4 w-4 text-purple-400" />
-                      ) : (
-                        <Square className="h-4 w-4 text-neutral-600" />
-                      )}
-                    </button>
-
-                    <span className="text-[10px] font-mono text-neutral-500 w-4 shrink-0 text-right">
-                      {idx + 1}.
-                    </span>
-
-                    {/* Editable Topic Title */}
-                    <input
-                      type="text"
-                      value={draft.title}
-                      onChange={(e) => handleUpdateTopicTitle(idx, e.target.value)}
-                      className={`flex-1 bg-transparent text-xs text-neutral-200 focus:bg-neutral-950 focus:px-2 focus:py-1 focus:rounded focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${
-                        !draft.selected && "line-through text-neutral-500"
-                      }`}
-                    />
-
-                    {/* Individual Delete Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTopic(idx)}
-                      className="p-1 text-neutral-500 hover:text-red-400 shrink-0"
-                      title="Excluir da lista"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                        Importância (1 a 5)
+                      </label>
+                      <Select
+                        value={importance.toString()}
+                        onChange={(e) => setImportance(Number(e.target.value))}
+                      >
+                        <option value="1">1 — Baixa</option>
+                        <option value="2">2 — Secundária</option>
+                        <option value="3">3 — Média / Padrão</option>
+                        <option value="4">4 — Alta / Muito Cobrado</option>
+                        <option value="5">5 — Crítica / Essencial</option>
+                      </Select>
+                    </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Quick inline add another topic */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  value={newTopicInput}
-                  onChange={(e) => setNewTopicInput(e.target.value)}
-                  placeholder="+ Adicionar outro subconteúdo à lista..."
-                  className="flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-700 focus:outline-none"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddManualTopic(e);
-                    }
-                  }}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                        Horas Previstas de Estudo
+                      </label>
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        max="100"
+                        value={estimatedHours}
+                        onChange={(e) => setEstimatedHours(e.target.value)}
+                        placeholder="Ex: 3"
+                      />
+                    </div>
+
+                    {assessments.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                          Cobrado na Avaliação
+                        </label>
+                        <Select
+                          value={assessmentId}
+                          onChange={(e) => setAssessmentId(e.target.value)}
+                        >
+                          <option value="">Nenhuma (geral)</option>
+                          {assessments.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.title}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TEXT MODE */}
+          {mode === "TEXT" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                  Lista de Tópicos (um por linha) *
+                </label>
+                <textarea
+                  rows={8}
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder={`Cole sua lista aqui:\n1. Introdução à Mecânica dos Fluidos\n2. Estática dos Fluidos\n3. Equação da Continuidade\n4. Balanço de Energia`}
+                  className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs font-mono text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+                  autoFocus
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddManualTopic}
-                  disabled={newTopicInput.trim().length === 0}
-                  className="h-7 text-xs px-2.5 border-neutral-750"
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Adicionar
-                </Button>
               </div>
 
               {assessments.length > 0 && (
-                <div className="pt-2 border-t border-neutral-850">
+                <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1.5">
                     Vincular a uma avaliação (opcional)
                   </label>
@@ -705,28 +476,30 @@ export function BatchTopicModal({
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
-            disabled={loading || extracting}
+            disabled={loading}
           >
             Cancelar
           </Button>
 
-          {topicDrafts.length > 0 && (
-            <Button
-              type="submit"
-              disabled={loading || extracting || selectedCount === 0}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Cadastrando...
-                </>
-              ) : importStructure === "MODULE_WITH_SUBTOPICS" ? (
-                `Criar Módulo com ${selectedCount} Subconteúdo(s)`
-              ) : (
-                `Cadastrar ${selectedCount} Tópico(s)`
-              )}
-            </Button>
-          )}
+          <Button
+            type="submit"
+            disabled={
+              loading ||
+              (mode === "FILE" && (!selectedFile || !lessonTitle.trim())) ||
+              (mode === "TEXT" && !rawText.trim())
+            }
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : mode === "FILE" ? (
+              "Cadastrar Aula e Anexar PDF"
+            ) : (
+              "Cadastrar Tópicos"
+            )}
+          </Button>
         </DialogFooter>
       </form>
     </Dialog>

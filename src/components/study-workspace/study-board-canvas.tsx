@@ -17,6 +17,7 @@ import {
   Edit2,
   FileText,
   Type,
+  Palette,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 
@@ -29,6 +30,39 @@ interface StudyBoardCanvasProps {
   onItemsChange?: (items: StudyBoardItemData[]) => void;
   onOpenInPdf: (pageNumber: number, anchorId?: string | null) => void;
 }
+
+const NOTE_THEMES: Record<string, { bg: string; border: string; text: string }> = {
+  neutral: {
+    bg: "bg-neutral-900/90",
+    border: "border-neutral-800",
+    text: "text-neutral-200",
+  },
+  purple: {
+    bg: "bg-purple-950/70",
+    border: "border-purple-800/80",
+    text: "text-purple-200",
+  },
+  blue: {
+    bg: "bg-blue-950/70",
+    border: "border-blue-800/80",
+    text: "text-blue-200",
+  },
+  yellow: {
+    bg: "bg-amber-950/70",
+    border: "border-amber-800/80",
+    text: "text-amber-200",
+  },
+  green: {
+    bg: "bg-emerald-950/70",
+    border: "border-emerald-800/80",
+    text: "text-emerald-200",
+  },
+  red: {
+    bg: "bg-red-950/70",
+    border: "border-red-800/80",
+    text: "text-red-200",
+  },
+};
 
 export function StudyBoardCanvas({
   boardId,
@@ -48,10 +82,18 @@ export function StudyBoardCanvas({
   const [isPanning, setIsPanning] = React.useState(false);
   const [panStart, setPanStart] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Tool & Items
+  // Tool & Styling
   const [activeTool, setActiveTool] = React.useState<BoardTool>("SELECT");
+  const [color, setColor] = React.useState<string>("#a855f7");
+  const [strokeWidth, setStrokeWidth] = React.useState<number>(4);
+
+  // Items and Selection
   const [items, setItems] = React.useState<StudyBoardItemData[]>(initialItems);
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null);
+
+  // History for Undo / Redo
+  const [history, setHistory] = React.useState<StudyBoardItemData[][]>([initialItems]);
+  const [historyIndex, setHistoryIndex] = React.useState<number>(0);
 
   // Live Drawing / Arrow state
   const [isDrawing, setIsDrawing] = React.useState(false);
@@ -83,7 +125,17 @@ export function StudyBoardCanvas({
   // Sync initial items when changed externally
   React.useEffect(() => {
     setItems(initialItems);
+    setHistory([initialItems]);
+    setHistoryIndex(0);
   }, [initialItems]);
+
+  // Push to history helper
+  const pushHistory = (newItems: StudyBoardItemData[]) => {
+    const updatedHistory = history.slice(0, historyIndex + 1);
+    updatedHistory.push(newItems);
+    setHistory(updatedHistory);
+    setHistoryIndex(updatedHistory.length - 1);
+  };
 
   // Convert screen coordinates to Board Canvas Coordinates
   const getBoardCoordinates = (clientX: number, clientY: number) => {
@@ -93,6 +145,75 @@ export function StudyBoardCanvas({
     const y = (clientY - rect.top - pan.y) / zoom;
     return { x, y };
   };
+
+  // Helper to check if active element is a text input
+  const isTyping = (target: EventTarget | null) => {
+    if (!target || !(target instanceof HTMLElement)) return false;
+    const tag = target.tagName.toLowerCase();
+    return (
+      tag === "input" ||
+      tag === "textarea" ||
+      target.isContentEditable ||
+      target.getAttribute("role") === "textbox"
+    );
+  };
+
+  // Keyboard Shortcuts in Lousa
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTyping(document.activeElement)) return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const isUndo = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z";
+      const isRedo =
+        ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "z") ||
+        ((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "y");
+
+      if (isUndo) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      if (isRedo) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedItemId) {
+          e.preventDefault();
+          handleDeleteItem(selectedItemId);
+        }
+        return;
+      }
+
+      switch (e.key.toUpperCase()) {
+        case "V":
+          setActiveTool("SELECT");
+          break;
+        case "T":
+          setActiveTool("TEXT");
+          break;
+        case "N":
+          setActiveTool("NOTE");
+          break;
+        case "P":
+          setActiveTool("PEN");
+          break;
+        case "A":
+          setActiveTool("ARROW");
+          break;
+        case "E":
+          setActiveTool("ERASER");
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedItemId, historyIndex, history, items]);
 
   // --- PANNING HANDLERS ---
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -109,7 +230,6 @@ export function StudyBoardCanvas({
   };
 
   const handlePointerDownBackground = (e: React.PointerEvent<HTMLDivElement>) => {
-    // If middle click or SELECT on empty canvas -> Pan
     const target = e.target as HTMLElement;
     const isBackground =
       target.id === "board-bg" ||
@@ -180,7 +300,7 @@ export function StudyBoardCanvas({
             ? {
                 ...item,
                 width: Math.max(120, Math.round(resizingItem.initialW + dw)),
-                height: Math.max(80, Math.round(resizingItem.initialH + dh)),
+                height: Math.max(60, Math.round(resizingItem.initialH + dh)),
               }
             : item
         )
@@ -209,8 +329,8 @@ export function StudyBoardCanvas({
         height: Math.max(20, maxY - minY),
         data: {
           points: currentStroke,
-          color: "#a855f7",
-          strokeWidth: 3,
+          color,
+          strokeWidth,
         },
       });
       setCurrentStroke([]);
@@ -229,7 +349,8 @@ export function StudyBoardCanvas({
             startY: arrowStart.y,
             endX: arrowCurrent.x,
             endY: arrowCurrent.y,
-            color: "#eab308",
+            color,
+            strokeWidth,
           },
         });
       }
@@ -282,6 +403,7 @@ export function StudyBoardCanvas({
       if (res.success && res.data) {
         const nextItems = [...items, res.data as StudyBoardItemData];
         setItems(nextItems);
+        pushHistory(nextItems);
         onItemsChange?.(nextItems);
         setLastSavedAt(new Date());
       } else {
@@ -299,11 +421,11 @@ export function StudyBoardCanvas({
       type: "TEXT",
       x,
       y,
-      width: 220,
-      height: 60,
+      width: 240,
+      height: 48,
       data: {
-        text: "Clique para editar texto...",
-        color: "#ffffff",
+        text: "Escreva algo livremente...",
+        color: color || "#ffffff",
         fontSize: 16,
       },
     });
@@ -358,7 +480,9 @@ export function StudyBoardCanvas({
   const handleDeleteItem = async (id: string) => {
     const nextItems = items.filter((i) => i.id !== id);
     setItems(nextItems);
+    pushHistory(nextItems);
     onItemsChange?.(nextItems);
+    if (selectedItemId === id) setSelectedItemId(null);
 
     setIsSaving(true);
     try {
@@ -369,6 +493,24 @@ export function StudyBoardCanvas({
       toast("Erro ao remover item.", "error");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevItems = history[historyIndex - 1];
+      setItems(prevItems);
+      setHistoryIndex(historyIndex - 1);
+      onItemsChange?.(prevItems);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextItems = history[historyIndex + 1];
+      setItems(nextItems);
+      setHistoryIndex(historyIndex + 1);
+      onItemsChange?.(nextItems);
     }
   };
 
@@ -401,7 +543,15 @@ export function StudyBoardCanvas({
       onPointerDown={handlePointerDownBackground}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className="relative w-full h-full bg-neutral-950 overflow-hidden select-none cursor-default"
+      className={`relative w-full h-full bg-neutral-950 overflow-hidden select-none ${
+        activeTool === "ERASER"
+          ? "cursor-pointer"
+          : activeTool === "PEN" || activeTool === "ARROW"
+          ? "cursor-crosshair"
+          : activeTool === "TEXT"
+          ? "cursor-text"
+          : "cursor-default"
+      }`}
       style={{
         backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px)`,
         backgroundSize: "24px 24px",
@@ -412,6 +562,14 @@ export function StudyBoardCanvas({
         <StudyBoardToolbar
           activeTool={activeTool}
           onSelectTool={setActiveTool}
+          color={color}
+          onChangeColor={setColor}
+          strokeWidth={strokeWidth}
+          onChangeStrokeWidth={setStrokeWidth}
+          canUndo={historyIndex > 0}
+          canRedo={historyIndex < history.length - 1}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
           zoom={zoom}
           onZoomIn={() => setZoom((z) => Math.min(2.0, z + 0.15))}
           onZoomOut={() => setZoom((z) => Math.max(0.25, z - 0.15))}
@@ -436,7 +594,10 @@ export function StudyBoardCanvas({
         {items.map((item) => {
           const isSelected = selectedItemId === item.id;
 
+          // 1. FREE TEXT ELEMENT (No background, no grey card, pure freeform text)
           if (item.type === "TEXT") {
+            const textColor = item.data.color || "#ffffff";
+
             return (
               <div
                 key={item.id}
@@ -450,64 +611,66 @@ export function StudyBoardCanvas({
                   width: item.width,
                   zIndex: item.zIndex,
                 }}
-                className={`absolute p-2 rounded-lg border transition-all ${
+                className={`absolute transition-all ${
                   isSelected
-                    ? "border-purple-500 ring-2 ring-purple-500/50 bg-neutral-900/90"
-                    : "border-transparent hover:border-neutral-800 bg-neutral-900/60"
+                    ? "border border-dashed border-purple-500/80 bg-neutral-900/20 rounded p-1.5 ring-2 ring-purple-500/30"
+                    : "border border-transparent p-1.5 hover:border-neutral-800/60"
                 }`}
               >
-                <div className="flex items-center justify-between gap-1 pb-1">
-                  <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      (e.target as Element).setPointerCapture(e.pointerId);
-                      setDraggingItem({
-                        id: item.id,
-                        startX: e.clientX,
-                        startY: e.clientY,
-                        initialX: item.x,
-                        initialY: item.y,
-                      });
-                    }}
-                    className="cursor-move p-0.5 text-neutral-500 hover:text-white"
-                    title="Mover texto"
-                  >
-                    <Move className="h-3 w-3" />
-                  </div>
-                  {isSelected && (
+                {/* Minimal Header on hover or select */}
+                {isSelected && (
+                  <div className="flex items-center justify-between gap-1 pb-1">
+                    <div
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        (e.target as Element).setPointerCapture(e.pointerId);
+                        setDraggingItem({
+                          id: item.id,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          initialX: item.x,
+                          initialY: item.y,
+                        });
+                      }}
+                      className="cursor-move p-0.5 text-neutral-400 hover:text-white"
+                      title="Mover texto livre"
+                    >
+                      <Move className="h-3 w-3" />
+                    </div>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteItem(item.id);
                       }}
                       className="text-neutral-500 hover:text-red-400 p-0.5"
-                      title="Excluir"
+                      title="Excluir texto"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                <input
-                  type="text"
+                <textarea
                   defaultValue={item.data.text}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.currentTarget.blur();
-                    }
-                  }}
+                  rows={2}
                   onBlur={(e) =>
                     persistItemUpdate(item.id, {
                       data: { ...item.data, text: e.target.value },
                     })
                   }
-                  className="w-full bg-transparent font-medium text-sm text-neutral-100 focus:outline-none focus:border-b border-purple-500 font-sans"
+                  style={{ color: textColor }}
+                  className="w-full bg-transparent font-sans text-base leading-snug font-medium focus:outline-none resize-none border-none outline-none"
                 />
               </div>
             );
           }
 
+          // 2. STUDY NOTE CARD (Rich card with background color themes)
           if (item.type === "NOTE") {
+            const noteColor = item.data.color || "purple";
+            const theme = NOTE_THEMES[noteColor] || NOTE_THEMES.neutral;
+
             return (
               <div
                 key={item.id}
@@ -522,14 +685,14 @@ export function StudyBoardCanvas({
                   height: item.height,
                   zIndex: item.zIndex,
                 }}
-                className={`absolute flex flex-col rounded-xl border p-3 bg-neutral-900/90 backdrop-blur-md shadow-2xl transition-all ${
-                  isSelected
-                    ? "border-purple-500 ring-2 ring-purple-500/50"
-                    : "border-neutral-800 hover:border-neutral-750"
+                className={`absolute flex flex-col rounded-xl border p-3.5 backdrop-blur-md shadow-2xl transition-all ${
+                  theme.bg
+                } ${theme.border} ${
+                  isSelected ? "ring-2 ring-purple-400/80 shadow-purple-950/50" : "hover:border-neutral-700"
                 }`}
               >
                 {/* Note Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-neutral-800 shrink-0">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0 gap-2">
                   <div
                     onPointerDown={(e) => {
                       e.stopPropagation();
@@ -542,9 +705,9 @@ export function StudyBoardCanvas({
                         initialY: item.y,
                       });
                     }}
-                    className="cursor-move flex items-center gap-1.5 text-neutral-400 hover:text-white"
+                    className="cursor-move flex items-center gap-1.5 text-neutral-300 hover:text-white min-w-0"
                   >
-                    <Move className="h-3 w-3" />
+                    <Move className="h-3 w-3 shrink-0" />
                     <input
                       type="text"
                       defaultValue={item.data.title || "Nota"}
@@ -553,48 +716,55 @@ export function StudyBoardCanvas({
                           data: { ...item.data, title: e.target.value },
                         })
                       }
-                      className="bg-transparent text-xs font-bold text-neutral-200 focus:outline-none"
+                      className="bg-transparent text-xs font-bold text-neutral-100 focus:outline-none truncate"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleBringToFront(item.id);
-                      }}
-                      className="p-1 text-neutral-500 hover:text-white"
-                      title="Trazer para frente"
-                    >
-                      <ArrowUp className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendToBack(item.id);
-                      }}
-                      className="p-1 text-neutral-500 hover:text-white"
-                      title="Enviar para trás"
-                    >
-                      <ArrowDown className="h-2.5 w-2.5" />
-                    </button>
+                  {/* Color Selector Dots */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {["neutral", "purple", "blue", "yellow", "green", "red"].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          persistItemUpdate(item.id, {
+                            data: { ...item.data, color: c },
+                          });
+                        }}
+                        className={`w-2.5 h-2.5 rounded-full transition-transform ${
+                          noteColor === c ? "scale-125 ring-1 ring-white" : "opacity-60 hover:opacity-100"
+                        } ${
+                          c === "neutral"
+                            ? "bg-neutral-600"
+                            : c === "purple"
+                            ? "bg-purple-500"
+                            : c === "blue"
+                            ? "bg-blue-500"
+                            : c === "yellow"
+                            ? "bg-amber-500"
+                            : c === "green"
+                            ? "bg-emerald-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                    ))}
+
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteItem(item.id);
                       }}
-                      className="p-1 text-neutral-500 hover:text-red-400"
-                      title="Excluir nota"
+                      className="p-0.5 text-neutral-400 hover:text-red-400 ml-1"
+                      title="Excluir card de nota"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
 
-                {/* Note Content */}
+                {/* Note Content Textarea */}
                 <div className="flex-1 pt-2">
                   <textarea
                     defaultValue={item.data.content}
@@ -603,8 +773,8 @@ export function StudyBoardCanvas({
                         data: { ...item.data, content: e.target.value },
                       })
                     }
-                    placeholder="Escreva sua explicação..."
-                    className="w-full h-full bg-transparent text-xs text-neutral-300 placeholder:text-neutral-600 focus:outline-none resize-none font-sans"
+                    placeholder="Escreva suas anotações..."
+                    className="w-full h-full bg-transparent text-xs text-neutral-200 placeholder:text-neutral-500 focus:outline-none resize-none font-sans"
                   />
                 </div>
 
@@ -621,7 +791,7 @@ export function StudyBoardCanvas({
                       initialH: item.height,
                     });
                   }}
-                  className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize text-neutral-600 hover:text-white flex items-center justify-center font-mono text-xs"
+                  className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize text-neutral-500 hover:text-white flex items-center justify-center font-mono text-xs"
                 >
                   ⌟
                 </div>
@@ -629,6 +799,7 @@ export function StudyBoardCanvas({
             );
           }
 
+          // 3. PDF REGION CARD ELEMENT
           if (item.type === "PDF_REGION") {
             return (
               <div
@@ -712,7 +883,7 @@ export function StudyBoardCanvas({
               refY="4"
               orient="auto"
             >
-              <polygon points="0 0, 8 4, 0 8" fill="#eab308" />
+              <polygon points="0 0, 8 4, 0 8" fill={color || "#eab308"} />
             </marker>
           </defs>
 
@@ -723,32 +894,76 @@ export function StudyBoardCanvas({
               for (let i = 1; i < points.length; i++) {
                 d += ` L ${points[i].x} ${points[i].y}`;
               }
+
+              const isSelected = selectedItemId === item.id;
+
               return (
                 <path
                   key={item.id}
                   d={d}
                   stroke={item.data.color || "#a855f7"}
-                  strokeWidth={item.data.strokeWidth || 3}
+                  strokeWidth={item.data.strokeWidth || 4}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   fill="none"
+                  className="cursor-pointer pointer-events-auto transition-opacity hover:opacity-80"
+                  style={isSelected ? { filter: "drop-shadow(0 0 6px rgba(168,85,247,0.8))" } : undefined}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (activeTool === "ERASER") {
+                      handleDeleteItem(item.id);
+                    } else {
+                      setSelectedItemId(item.id);
+                    }
+                  }}
+                  onPointerEnter={(e) => {
+                    if (e.buttons === 1 && activeTool === "ERASER") {
+                      handleDeleteItem(item.id);
+                    }
+                  }}
                 />
               );
             }
 
             if (item.type === "ARROW" && item.data.startX !== undefined) {
+              const isSelected = selectedItemId === item.id;
+
               return (
-                <line
+                <g
                   key={item.id}
-                  x1={item.data.startX}
-                  y1={item.data.startY}
-                  x2={item.data.endX}
-                  y2={item.data.endY}
-                  stroke={item.data.color || "#eab308"}
-                  strokeWidth={3}
-                  strokeLinecap="round"
-                  markerEnd="url(#board-arrow)"
-                />
+                  className="cursor-pointer pointer-events-auto hover:opacity-80"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (activeTool === "ERASER") {
+                      handleDeleteItem(item.id);
+                    } else {
+                      setSelectedItemId(item.id);
+                    }
+                  }}
+                  onPointerEnter={(e) => {
+                    if (e.buttons === 1 && activeTool === "ERASER") {
+                      handleDeleteItem(item.id);
+                    }
+                  }}
+                >
+                  <line
+                    x1={item.data.startX}
+                    y1={item.data.startY}
+                    x2={item.data.endX}
+                    y2={item.data.endY}
+                    stroke={item.data.color || "#eab308"}
+                    strokeWidth={item.data.strokeWidth || 3}
+                    strokeLinecap="round"
+                    markerEnd="url(#board-arrow)"
+                    style={isSelected ? { filter: "drop-shadow(0 0 6px rgba(234,179,8,0.8))" } : undefined}
+                  />
+                  <circle
+                    cx={item.data.startX}
+                    cy={item.data.startY}
+                    r={(item.data.strokeWidth || 3) * 1.2}
+                    fill={item.data.color || "#eab308"}
+                  />
+                </g>
               );
             }
 
@@ -762,8 +977,8 @@ export function StudyBoardCanvas({
                 .slice(1)
                 .map((p) => `L ${p.x} ${p.y}`)
                 .join(" ")}`}
-              stroke="#a855f7"
-              strokeWidth={3}
+              stroke={color}
+              strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
@@ -777,8 +992,8 @@ export function StudyBoardCanvas({
               y1={arrowStart.y}
               x2={arrowCurrent.x}
               y2={arrowCurrent.y}
-              stroke="#eab308"
-              strokeWidth={3}
+              stroke={color}
+              strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeDasharray="4 4"
             />

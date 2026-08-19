@@ -268,12 +268,13 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
 
         {/* Schedules Tab */}
         <TabsContent value="schedules">
-          <SubjectScheduleTab subjectId={subject.id} schedules={subject.schedules} />
+          <SubjectScheduleTab key={subject.id} subjectId={subject.id} schedules={subject.schedules} />
         </TabsContent>
 
         {/* Grades Tab */}
         <TabsContent value="grades">
           <SubjectGradesTab
+            key={subject.id}
             subjectId={subject.id}
             gradingScheme={subject.gradingScheme}
             assessments={subject.assessments || []}
@@ -283,6 +284,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
         {/* Attendance Tab */}
         <TabsContent value="attendance">
           <SubjectAttendanceTab
+            key={subject.id}
             subjectId={subject.id}
             minimumAttendancePercentage={subject.minimumAttendancePercentage}
             sessions={subject.classSessions || []}
@@ -292,6 +294,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
         {/* Topics Tab */}
         <TabsContent value="topics">
           <SubjectTopicsTab
+            key={subject.id}
             subjectId={subject.id}
             subjectName={subject.name}
             subjectCode={subject.code}

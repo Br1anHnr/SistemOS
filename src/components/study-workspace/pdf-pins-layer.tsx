@@ -52,6 +52,8 @@ interface PdfPinsLayerProps {
     title?: string;
     anchorId?: string | null;
   }) => void;
+  onDeleteAnchor?: (anchorId: string) => void;
+  onDeleteNote?: (noteId: string) => void;
 }
 
 export function PdfPinsLayer({
@@ -64,6 +66,8 @@ export function PdfPinsLayer({
   onSelectNote,
   onCreateAnchoredNote,
   onAddToBoard,
+  onDeleteAnchor,
+  onDeleteNote,
 }: PdfPinsLayerProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -264,18 +268,35 @@ export function PdfPinsLayer({
                 <span>{symbol}</span>
               </div>
 
-              {/* Hover Tooltip Preview */}
-              <div className="hidden group-hover:block absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 rounded bg-neutral-950/95 border border-neutral-700 text-white text-[11px] shadow-2xl z-30 pointer-events-none animate-in fade-in zoom-in-95">
-                <div className="font-semibold text-purple-300 mb-0.5 truncate">
-                  {note.type === "QUESTION"
-                    ? "Dúvida"
-                    : note.type === "IMPORTANT"
-                    ? "Importante"
-                    : note.type === "FORMULA"
-                    ? "Fórmula"
-                    : note.type === "EXAM"
-                    ? "Cai na prova"
-                    : "Anotação"}
+              {/* Hover Tooltip Preview or Selected Actions */}
+              <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 rounded bg-neutral-950/95 border border-neutral-700 text-white text-[11px] shadow-2xl z-30 animate-in fade-in zoom-in-95 ${
+                isSelected ? "block pointer-events-auto" : "hidden group-hover:block pointer-events-none"
+              }`}>
+                <div className="flex items-center justify-between font-semibold text-purple-300 mb-0.5 truncate">
+                  <span>
+                    {note.type === "QUESTION"
+                      ? "Dúvida"
+                      : note.type === "IMPORTANT"
+                      ? "Importante"
+                      : note.type === "FORMULA"
+                      ? "Fórmula"
+                      : note.type === "EXAM"
+                      ? "Cai na prova"
+                      : "Anotação"}
+                  </span>
+                  {isSelected && onDeleteAnchor && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteAnchor(anchor.id);
+                      }}
+                      className="p-0.5 text-neutral-400 hover:text-red-400 transition-colors"
+                      title="Excluir marcador"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
                 <p className="line-clamp-3 text-neutral-300">{note.content}</p>
               </div>
@@ -308,8 +329,8 @@ export function PdfPinsLayer({
                   : "border-indigo-400/70 bg-indigo-500/10 hover:border-indigo-300 hover:bg-indigo-500/20"
               }`}
             >
-              {/* Region Label Tag & Quick Add To Board */}
-              <div className="absolute top-1 left-1 flex items-center gap-1">
+              {/* Region Label Tag & Actions */}
+              <div className="absolute top-1 left-1 flex items-center gap-1 flex-wrap">
                 <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-neutral-950/80 text-indigo-200 border border-indigo-700/60 shadow-sm pointer-events-none">
                   {note.type === "FORMULA"
                     ? "ƒ Fórmula"
@@ -342,6 +363,21 @@ export function PdfPinsLayer({
                   >
                     <LayoutGrid className="h-2.5 w-2.5" />
                     <span>+ Lousa</span>
+                  </button>
+                )}
+
+                {isSelected && onDeleteAnchor && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteAnchor(anchor.id);
+                    }}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-600/90 hover:bg-red-500 text-white shadow-sm flex items-center gap-0.5 transition-colors"
+                    title="Remover apenas o trecho gráfico do PDF (mantém anotação)"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                    <span>Remover Trecho</span>
                   </button>
                 )}
               </div>

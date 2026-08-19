@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { subjectMaterials } from "@/db/schema";
-import { asc, desc, eq } from "drizzle-orm";
+import { subjectMaterials, topics } from "@/db/schema";
+import { asc, desc, eq, and } from "drizzle-orm";
 
 export async function getMaterialsBySubjectId(subjectId: string) {
   const list = await db
@@ -22,6 +22,17 @@ export async function createMaterial(data: {
   fileSize?: number | null;
   pageCount?: number | null;
 }) {
+  if (data.topicId) {
+    const [topic] = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(eq(topics.id, data.topicId), eq(topics.subjectId, data.subjectId)));
+
+    if (!topic) {
+      throw new Error("O tópico vinculado ao material não pertence a esta disciplina.");
+    }
+  }
+
   const [created] = await db
     .insert(subjectMaterials)
     .values({

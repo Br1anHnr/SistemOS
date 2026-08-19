@@ -77,6 +77,29 @@ export function AnnotationLayer({
   // Selection state
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
+  // Delete shortcut when annotation is selected
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = document.activeElement;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        onDeleteAnnotation(selectedId);
+        setSelectedId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedId, onDeleteAnnotation]);
+
   if (!isVisible || pageWidth === 0 || pageHeight === 0) return null;
 
   // Helper to convert screen pointer to normalized coordinates (0..1)
@@ -287,7 +310,8 @@ export function AnnotationLayer({
                 strokeLinejoin="round"
                 fill="none"
                 opacity={ann.data.opacity ?? 1}
-                className="transition-opacity cursor-pointer"
+                className="transition-opacity cursor-pointer pointer-events-auto"
+                style={isSelected ? { filter: "drop-shadow(0 0 4px #a855f7)" } : undefined}
                 onPointerDown={(e) => {
                   if (activeTool === "ERASER") {
                     e.stopPropagation();
@@ -295,6 +319,12 @@ export function AnnotationLayer({
                   } else if (activeTool === "SELECT") {
                     e.stopPropagation();
                     setSelectedId(ann.id);
+                  }
+                }}
+                onPointerEnter={(e) => {
+                  if (e.buttons === 1 && activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
                   }
                 }}
               />
@@ -312,8 +342,11 @@ export function AnnotationLayer({
                 strokeLinejoin="round"
                 fill="none"
                 opacity={ann.data.opacity ?? 0.35}
-                style={{ mixBlendMode: "multiply" }}
-                className="cursor-pointer"
+                style={{
+                  mixBlendMode: "multiply",
+                  ...(isSelected ? { filter: "drop-shadow(0 0 4px #a855f7)" } : {}),
+                }}
+                className="cursor-pointer pointer-events-auto"
                 onPointerDown={(e) => {
                   if (activeTool === "ERASER") {
                     e.stopPropagation();
@@ -321,6 +354,12 @@ export function AnnotationLayer({
                   } else if (activeTool === "SELECT") {
                     e.stopPropagation();
                     setSelectedId(ann.id);
+                  }
+                }}
+                onPointerEnter={(e) => {
+                  if (e.buttons === 1 && activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
                   }
                 }}
               />
@@ -336,7 +375,8 @@ export function AnnotationLayer({
             return (
               <g
                 key={ann.id}
-                className="cursor-pointer"
+                className="cursor-pointer pointer-events-auto"
+                style={isSelected ? { filter: "drop-shadow(0 0 4px #a855f7)" } : undefined}
                 onPointerDown={(e) => {
                   if (activeTool === "ERASER") {
                     e.stopPropagation();
@@ -344,6 +384,12 @@ export function AnnotationLayer({
                   } else if (activeTool === "SELECT") {
                     e.stopPropagation();
                     setSelectedId(ann.id);
+                  }
+                }}
+                onPointerEnter={(e) => {
+                  if (e.buttons === 1 && activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
                   }
                 }}
               >
@@ -383,7 +429,8 @@ export function AnnotationLayer({
                 strokeWidth={ann.data.strokeWidth || 2}
                 fill={ann.data.fillColor || "rgba(59, 130, 246, 0.15)"}
                 rx={4}
-                className="cursor-pointer"
+                className="cursor-pointer pointer-events-auto"
+                style={isSelected ? { filter: "drop-shadow(0 0 4px #a855f7)" } : undefined}
                 onPointerDown={(e) => {
                   if (activeTool === "ERASER") {
                     e.stopPropagation();
@@ -391,6 +438,12 @@ export function AnnotationLayer({
                   } else if (activeTool === "SELECT") {
                     e.stopPropagation();
                     setSelectedId(ann.id);
+                  }
+                }}
+                onPointerEnter={(e) => {
+                  if (e.buttons === 1 && activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
                   }
                 }}
               />
@@ -405,7 +458,7 @@ export function AnnotationLayer({
               <g
                 key={ann.id}
                 transform={`translate(${x}, ${y})`}
-                className="cursor-pointer"
+                className="cursor-pointer pointer-events-auto"
                 onPointerDown={(e) => {
                   if (activeTool === "ERASER") {
                     e.stopPropagation();
@@ -413,6 +466,12 @@ export function AnnotationLayer({
                   } else if (activeTool === "SELECT") {
                     e.stopPropagation();
                     setSelectedId(ann.id);
+                  }
+                }}
+                onPointerEnter={(e) => {
+                  if (e.buttons === 1 && activeTool === "ERASER") {
+                    e.stopPropagation();
+                    onDeleteAnnotation(ann.id);
                   }
                 }}
               >

@@ -37,6 +37,7 @@ import {
 import {
   getAnchoredNotesAction,
   createAnchoredNoteAction,
+  deletePdfNoteAnchorAction,
 } from "@/actions/pdf-note-anchor.actions";
 import {
   getTopicBoardAction,
@@ -45,6 +46,7 @@ import {
 import { AnchoredTopicNoteItem } from "@/services/pdf-note-anchor.service";
 import { StudyBoardData } from "@/services/study-board.service";
 import { useToast } from "@/components/ui/toast";
+import { PdfFitMode } from "./pdf-canvas-renderer";
 
 interface StudyWorkspaceModalProps {
   open: boolean;
@@ -80,6 +82,7 @@ export function StudyWorkspaceModal({
 
   // Navigation & View state
   const [zoom, setZoom] = React.useState<number>(100);
+  const [fitMode, setFitMode] = React.useState<PdfFitMode>("PAGE");
   const [currentPage, setCurrentPage] = React.useState<number>(1);
   const [totalPages, setTotalPages] = React.useState<number>(1);
   const [inputPage, setInputPage] = React.useState<string>("1");
@@ -91,6 +94,28 @@ export function StudyWorkspaceModal({
   const [isMissing, setIsMissing] = React.useState<boolean>(false);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const pdfViewportRef = React.useRef<HTMLDivElement | null>(null);
+  const [containerDimensions, setContainerDimensions] = React.useState<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
+
+  // Track container size for dynamic Fit Page / Fit Width
+  React.useEffect(() => {
+    if (!pdfViewportRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect) {
+          setContainerDimensions({
+            width: Math.round(entry.contentRect.width),
+            height: Math.round(entry.contentRect.height),
+          });
+        }
+      }
+    });
+    observer.observe(pdfViewportRef.current);
+    return () => observer.disconnect();
+  }, [open, workspaceMode]);
 
   // --- ANNOTATIONS STATE (FASE B1) ---
   const [isAnnotationMode, setIsAnnotationMode] = React.useState<boolean>(false);
@@ -418,6 +443,85 @@ export function StudyWorkspaceModal({
     }
   };
 
+  // Delete Anchor (Region/Pin) without deleting note
+  const handleDeleteAnchor = async (anchorId: string) => {
+    try {
+      const res = await deletePdfNoteAnchorAction(anchorId, subjectId);
+      if (res.success) {
+        toast("Trecho removido com sucesso!");
+        await loadAnchoredNotes();
+      } else {
+        toast(res.error || "Erro ao remover trecho.", "error");
+      }
+    } catch {
+      toast("Erro ao remover trecho.", "error");
+    }
+  };
+
+  // Helper to check if user is currently typing
+  const isTyping = (target: EventTarget | null) => {
+    if (!target || !(target instanceof HTMLElement)) return false;
+    const tag = target.tagName.toLowerCase();
+    return (
+      tag === "input" ||
+      tag === "textarea" ||
+      target.isContentEditable ||
+      target.getAttribute("role") === "textbox"
+    );
+  };
+
+  // Global Keyboard Shortcuts in PDF Mode
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!open || workspaceMode !== "PDF") return;
+      if (isTyping(document.activeElement)) return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const isUndo = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z";
+      const isRedo =
+        ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "z") ||
+        ((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "y");
+
+      if (e.key === "ArrowRight" || e.key === "PageDown") {
+        e.preventDefault();
+        handleNavigateToPage(currentPage + 1);
+        return;
+      }
+
+      if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        handleNavigateToPage(currentPage - 1);
+        return;
+      }
+
+      if (isUndo) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      if (isRedo) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedNoteId) {
+          const selectedItem = anchoredNotes.find((n) => n.id === selectedNoteId);
+          if (selectedItem?.anchor) {
+            e.preventDefault();
+            handleDeleteAnchor(selectedItem.anchor.id);
+            setSelectedNoteId(null);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, workspaceMode, currentPage, totalPages, historyIndex, history, selectedNoteId, anchoredNotes]);
+
   // Bidirectional Selection: From PDF to StudyPanel
   const handleSelectNoteFromPdf = (noteId: string) => {
     setSelectedNoteId(noteId);
@@ -590,24 +694,55 @@ export function StudyWorkspaceModal({
                     </form>
                   )}
 
-                  {/* Zoom Controls */}
+                  {/* Fit & Zoom Controls */}
                   {activeUrl && !isMissing && (
-                    <div className="hidden sm:flex items-center rounded-md bg-neutral-950 border border-neutral-800 p-0.5 text-xs text-neutral-300">
+                    <div className="hidden sm:flex items-center rounded-md bg-neutral-950 border border-neutral-800 p-0.5 text-xs text-neutral-300 gap-0.5">
                       <button
                         type="button"
-                        onClick={() => setZoom((z) => Math.max(50, z - 25))}
+                        onClick={() => setFitMode("PAGE")}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                          fitMode === "PAGE"
+                            ? "bg-purple-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                        title="Ajustar à Página inteira"
+                      >
+                        Pág.
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFitMode("WIDTH")}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                          fitMode === "WIDTH"
+                            ? "bg-purple-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                        title="Ajustar à Largura"
+                      >
+                        Larg.
+                      </button>
+                      <div className="h-3 w-px bg-neutral-800 mx-0.5" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFitMode("CUSTOM");
+                          setZoom((z) => Math.max(50, z - 25));
+                        }}
                         className="p-1 hover:text-white disabled:opacity-30"
                         title="Diminuir Zoom"
                         disabled={zoom <= 50}
                       >
                         <ZoomOut className="h-3.5 w-3.5" />
                       </button>
-                      <span className="px-2 font-mono text-[11px] min-w-[40px] text-center">
+                      <span className="px-1.5 font-mono text-[11px] min-w-[36px] text-center">
                         {zoom}%
                       </span>
                       <button
                         type="button"
-                        onClick={() => setZoom((z) => Math.min(200, z + 25))}
+                        onClick={() => {
+                          setFitMode("CUSTOM");
+                          setZoom((z) => Math.min(200, z + 25));
+                        }}
                         className="p-1 hover:text-white disabled:opacity-30"
                         title="Aumentar Zoom"
                         disabled={zoom >= 200}
@@ -694,7 +829,10 @@ export function StudyWorkspaceModal({
               )}
 
               {/* PDF Document Canvas Area */}
-              <div className="flex-1 bg-neutral-900/40 overflow-auto flex items-center justify-center p-2 relative min-w-0">
+              <div
+                ref={pdfViewportRef}
+                className="flex-1 bg-neutral-900/40 overflow-auto flex items-center justify-center p-2 relative min-w-0"
+              >
                 {loading ? (
                   <div className="text-center space-y-2">
                     <Loader2 className="h-8 w-8 text-purple-400 animate-spin mx-auto" />
@@ -734,6 +872,9 @@ export function StudyWorkspaceModal({
                     pdfUrl={activeUrl}
                     pageNumber={currentPage}
                     zoom={zoom}
+                    fitMode={fitMode}
+                    containerWidth={containerDimensions.width}
+                    containerHeight={containerDimensions.height}
                     onLoadSuccess={(pages) => setTotalPages(pages)}
                   >
                     {({ width, height }) => (
@@ -768,6 +909,7 @@ export function StudyWorkspaceModal({
                           onSelectNote={handleSelectNoteFromPdf}
                           onCreateAnchoredNote={handleCreateAnchoredNote}
                           onAddToBoard={handleAddRegionToBoard}
+                          onDeleteAnchor={handleDeleteAnchor}
                         />
                       </>
                     )}

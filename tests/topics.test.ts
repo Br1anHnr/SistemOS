@@ -122,4 +122,34 @@ describe("Domain: Topics & Mastery Calculations", () => {
     expect(progress.total).toBe(3); // c1, c2, p2 (p1 is skipped because it has children)
     expect(progress.completedCount).toBe(1); // c1
   });
+
+  it("should ensure complete isolation between Subject A and Subject B topics", () => {
+    const subjectATopics: TopicItem[] = [
+      { id: "a1", title: "Fenômenos: Condução Térmica", status: "COMPLETED", masteryLevel: 4, importance: 4, orderIndex: 1 },
+      { id: "a2", title: "Fenômenos: Convecção e Radiação", status: "IN_PROGRESS", masteryLevel: 2, importance: 3, orderIndex: 2 },
+    ];
+
+    const subjectBTopics: TopicItem[] = [
+      { id: "b1", title: "ASP: Fluxo de Carga", status: "NOT_STARTED", masteryLevel: 0, importance: 5, orderIndex: 1 },
+      { id: "b2", title: "ASP: Estabilidade de Tensão", status: "NOT_STARTED", masteryLevel: 0, importance: 4, orderIndex: 2 },
+      { id: "b3", title: "ASP: Curto-Circuito Simétrico", status: "NOT_STARTED", masteryLevel: 0, importance: 4, orderIndex: 3 },
+    ];
+
+    const treeA = buildTopicTree(subjectATopics);
+    const treeB = buildTopicTree(subjectBTopics);
+
+    expect(treeA.length).toBe(2);
+    expect(treeA.map((t) => t.id)).toEqual(["a1", "a2"]);
+    expect(treeA.some((t) => t.title.includes("ASP"))).toBe(false);
+
+    expect(treeB.length).toBe(3);
+    expect(treeB.map((t) => t.id)).toEqual(["b1", "b2", "b3"]);
+    expect(treeB.some((t) => t.title.includes("Fenômenos"))).toBe(false);
+
+    const progressA = calculateTopicProgress(subjectATopics);
+    const progressB = calculateTopicProgress(subjectBTopics);
+
+    expect(progressA.progressPercentage).toBe(50);
+    expect(progressB.progressPercentage).toBe(0);
+  });
 });

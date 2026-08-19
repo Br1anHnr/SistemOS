@@ -83,6 +83,17 @@ export async function createTopic(data: {
   status?: "NOT_STARTED" | "IN_PROGRESS" | "REVIEWED" | "COMPLETED" | "ARCHIVED";
   assessmentId?: string | null;
 }) {
+  if (data.parentId) {
+    const [parent] = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(eq(topics.id, data.parentId), eq(topics.subjectId, data.subjectId)));
+
+    if (!parent) {
+      throw new Error("O tópico pai selecionado não pertence a esta disciplina.");
+    }
+  }
+
   let orderIndex = data.orderIndex;
 
   if (orderIndex === undefined || orderIndex === 0) {
@@ -255,7 +266,7 @@ export async function reorderTopics(
         orderIndex: item.orderIndex,
         updatedAt: new Date(),
       })
-      .where(eq(topics.id, item.id));
+      .where(and(eq(topics.id, item.id), eq(topics.subjectId, subjectId)));
   }
 
   return { success: true };

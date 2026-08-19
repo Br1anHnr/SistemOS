@@ -4,10 +4,15 @@ import * as React from "react";
 import { getDocumentProxy } from "unpdf";
 import { Loader2, AlertCircle } from "lucide-react";
 
+export type PdfFitMode = "PAGE" | "WIDTH" | "CUSTOM";
+
 interface PdfCanvasRendererProps {
   pdfUrl: string;
   pageNumber: number;
   zoom: number; // e.g. 100 for 100%, 150 for 150%
+  fitMode?: PdfFitMode;
+  containerWidth?: number;
+  containerHeight?: number;
   onLoadSuccess?: (totalPages: number, width: number, height: number) => void;
   children?: (dimensions: { width: number; height: number }) => React.ReactNode;
 }
@@ -16,6 +21,9 @@ export function PdfCanvasRenderer({
   pdfUrl,
   pageNumber,
   zoom,
+  fitMode = "CUSTOM",
+  containerWidth,
+  containerHeight,
   onLoadSuccess,
   children,
 }: PdfCanvasRendererProps) {
@@ -69,7 +77,7 @@ export function PdfCanvasRenderer({
     };
   }, [pdfUrl]);
 
-  // 2. Render active page on canvas when pageNumber or zoom changes
+  // 2. Render active page on canvas when pageNumber, zoom, fitMode or container dimensions change
   React.useEffect(() => {
     let isMounted = true;
 
@@ -78,7 +86,6 @@ export function PdfCanvasRenderer({
       setLoading(true);
 
       try {
-        // Cancel previous render task if active
         if (renderTaskRef.current) {
           try {
             renderTaskRef.current.cancel();
@@ -91,9 +98,27 @@ export function PdfCanvasRenderer({
         const page = await pdf.getPage(Math.min(Math.max(1, pageNumber), pdf.numPages));
         if (!isMounted) return;
 
-        // Base resolution scaling (scale 1.5 * zoom factor for crisp text on Retina/High-DPI)
-        const scale = 1.35 * (zoom / 100);
-        const viewport = page.getViewport({ scale });
+        // Base 1.0 viewport to calculate natural aspect ratio
+        const naturalViewport = page.getViewport({ scale: 1.0 });
+        const naturalW = naturalViewport.width;
+        const naturalH = naturalViewport.height;
+
+        let displayScale = 1.35 * (zoom / 100);
+
+        if (fitMode === "PAGE" && containerWidth && containerHeight && containerWidth > 100 && containerHeight > 100) {
+          const availW = Math.max(200, containerWidth - 48);
+          const availH = Math.max(200, containerHeight - 48);
+          const scaleW = availW / naturalW;
+          const scaleH = availH / naturalH;
+          displayScale = Math.min(scaleW, scaleH);
+        } else if (fitMode === "WIDTH" && containerWidth && containerWidth > 100) {
+          const availW = Math.max(200, containerWidth - 48);
+          displayScale = availW / naturalW;
+        }
+
+        // Render at high resolution (1.5x pixel ratio) for crisp text/lines
+        const renderScale = displayScale * 1.5;
+        const viewport = page.getViewport({ scale: renderScale });
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -104,7 +129,10 @@ export function PdfCanvasRenderer({
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        setDimensions({ width: viewport.width, height: viewport.height });
+        const displayedWidth = Math.round(naturalW * displayScale);
+        const displayedHeight = Math.round(naturalH * displayScale);
+
+        setDimensions({ width: displayedWidth, height: displayedHeight });
 
         const renderContext = {
           canvasContext: context,
@@ -129,7 +157,7 @@ export function PdfCanvasRenderer({
     return () => {
       isMounted = false;
     };
-  }, [pageNumber, zoom, pdfDocRef.current]);
+  }, [pageNumber, zoom, fitMode, containerWidth, containerHeight, pdfDocRef.current]);
 
   return (
     <div className="relative flex flex-col items-center justify-center min-w-fit min-h-fit py-4">

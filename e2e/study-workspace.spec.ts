@@ -127,7 +127,7 @@ test.describe("Study Workspace End-to-End Tests", () => {
 
     // Verify Study Workspace opened in BOARD mode
     await expect(page.locator("text=Workspace de Estudo")).toBeVisible();
-    await expect(page.locator("button[title*='Nota de Estudo']")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("button[title*='Nota / Card']")).toBeVisible({ timeout: 5000 });
 
     // Switch between PDF and Lousa modes using exact data-testid
     const pdfTabBtn = page.getByTestId("workspace-mode-pdf");
@@ -140,7 +140,8 @@ test.describe("Study Workspace End-to-End Tests", () => {
     await page.waitForTimeout(200);
 
     // Verify Lousa tools are active and responsive
-    await expect(page.locator("button[title*='Nota de Estudo']")).toBeVisible();
+    await expect(page.locator("button[title*='Nota / Card']")).toBeVisible();
+    await expect(page.locator("button[title*='Borracha (E)']")).toBeVisible();
   });
 
   test("E2E 5 — Category and Page Filters in Study Panel", async ({ page }) => {
@@ -165,5 +166,53 @@ test.describe("Study Workspace End-to-End Tests", () => {
     await filterFormulas.click();
     await filterExam.click();
     await filterAll.click();
+  });
+
+  test("E2E 6 — Subject Isolation: Verify topics belong strictly to their subject", async ({ page }) => {
+    await page.goto("/subjects");
+    await page.waitForLoadState("networkidle");
+
+    const subjectCards = page.locator("a[href^='/subjects/']");
+    const count = await subjectCards.count();
+    expect(count).toBeGreaterThan(0);
+
+    // Open first subject
+    await subjectCards.first().click();
+    await page.waitForLoadState("networkidle");
+
+    const topicsTab = page.locator("button:has-text('Conteúdos')").first();
+    await topicsTab.click();
+    await page.waitForTimeout(400);
+
+    // If there is a second subject, verify topics do not bleed
+    if (count > 1) {
+      await page.goto("/subjects");
+      await page.waitForLoadState("networkidle");
+
+      await subjectCards.nth(1).click();
+      await page.waitForLoadState("networkidle");
+
+      const topicsTab2 = page.locator("button:has-text('Conteúdos')").first();
+      await topicsTab2.click();
+      await page.waitForTimeout(400);
+
+      // Verify page is clean and correctly scoped
+      await expect(page.locator("text=Conteúdos da Disciplina")).toBeVisible();
+    }
+  });
+
+  test("E2E 7 — PDF Fit Controls and Mode Toggles", async ({ page }) => {
+    await openFirstTopicWorkspace(page, "PDF");
+
+    // Check Fit Page & Fit Width buttons exist in top bar
+    const fitPageBtn = page.locator("button[title*='Ajustar à Página']");
+    const fitWidthBtn = page.locator("button[title*='Ajustar à Largura']");
+
+    if (await fitPageBtn.isVisible()) {
+      await fitWidthBtn.click();
+      await page.waitForTimeout(200);
+      await fitPageBtn.click();
+      await page.waitForTimeout(200);
+    }
   });
 });

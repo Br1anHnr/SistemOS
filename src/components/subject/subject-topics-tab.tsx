@@ -214,11 +214,10 @@ export function SubjectTopicsTab({
     try {
       const res = await reorderTopicsAction(subjectId, reorderedPayload);
       if (res.success) {
-        toast("Ordem de aulas atualizada!");
         router.refresh();
       }
     } catch {
-      toast("Erro ao salvar reordenação.", "error");
+      // Silently fail or keep optimistic
     }
   };
 
@@ -261,11 +260,10 @@ export function SubjectTopicsTab({
     try {
       const res = await reorderTopicsAction(subjectId, reorderedPayload);
       if (res.success) {
-        toast("Ordem dos subtópicos atualizada!");
         router.refresh();
       }
     } catch {
-      toast("Erro ao salvar reordenação.", "error");
+      // Silently fail or keep optimistic
     }
   };
 

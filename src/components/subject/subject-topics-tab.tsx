@@ -98,6 +98,8 @@ export function SubjectTopicsTab({
 
   // PDF Viewer state
   const [pdfViewerOpen, setPdfViewerOpen] = React.useState(false);
+  const [activeMaterialId, setActiveMaterialId] = React.useState<string | null>(null);
+  const [activeTopicId, setActiveTopicId] = React.useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = React.useState<string | null>(null);
   const [activePdfTitle, setActivePdfTitle] = React.useState<string>("");
   const [activePdfFileName, setActivePdfFileName] = React.useState<string>("");
@@ -283,6 +285,8 @@ export function SubjectTopicsTab({
   };
 
   const handleOpenPdf = (material: SubjectMaterialItem) => {
+    setActiveMaterialId(material.id);
+    setActiveTopicId(material.topicId || null);
     setActivePdfUrl(material.fileUrl);
     setActivePdfTitle(material.title);
     setActivePdfFileName(material.fileName);
@@ -829,6 +833,8 @@ export function SubjectTopicsTab({
         open={pdfViewerOpen}
         onOpenChange={setPdfViewerOpen}
         title={activePdfTitle}
+        materialId={activeMaterialId}
+        topicId={activeTopicId}
         pdfUrl={activePdfUrl}
         fileName={activePdfFileName}
       />

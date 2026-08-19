@@ -156,9 +156,9 @@ export function BatchTopicModal({
         const createdTopicId = topicRes.data.id;
         const objectUrl = URL.createObjectURL(selectedFile);
 
-        // 2. Attach PDF material to this created topic
+        // 2. Attach PDF material to database and save file in IndexedDB
         try {
-          await createMaterialAction({
+          const matRes = await createMaterialAction({
             subjectId,
             topicId: createdTopicId,
             title: lessonTitle.trim(),
@@ -167,11 +167,18 @@ export function BatchTopicModal({
             fileUrl: objectUrl,
             fileSize: selectedFile.size,
           });
+
+          // Store in browser persistent IndexedDB storage
+          const { storePdfFile } = await import("@/lib/pdf-storage");
+          if (matRes.success && matRes.data) {
+            await storePdfFile(matRes.data.id, selectedFile);
+          }
+          await storePdfFile(createdTopicId, selectedFile);
         } catch {
-          // Continue if material index succeeds locally
+          // Continue
         }
 
-        toast(`Aula "${lessonTitle}" cadastrada e PDF anexado com sucesso!`);
+        toast(`Aula "${lessonTitle}" cadastrada e PDF salvo com sucesso!`);
       } else {
         // Mode TEXT (Batch syllabus pasting)
         const lines = rawText

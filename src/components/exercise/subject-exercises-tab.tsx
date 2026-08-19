@@ -22,10 +22,12 @@ import { useToast } from "@/components/ui/toast";
 import { ExerciseSetItem, ExerciseItem, calculateExerciseSetProgress } from "@/domain/exercises";
 import { deleteExerciseSetAction, getExerciseSetsAction, getExercisesAction } from "@/actions/exercise.actions";
 import { ExerciseSetCard } from "./exercise-set-card";
+import { ExerciseCard } from "./exercise-card";
 import { ExerciseSetModal } from "./exercise-set-modal";
 import { ExerciseModal } from "./exercise-modal";
 import { ExerciseSetDetailModal } from "./exercise-set-detail-modal";
 import { ExerciseDetailModal } from "./exercise-detail-modal";
+import { AttemptRegisterModal } from "./attempt-register-modal";
 
 interface SubjectExercisesTabProps {
   subjectId: string;
@@ -61,6 +63,9 @@ export function SubjectExercisesTab({
 
   const [activeSetDetail, setActiveSetDetail] = React.useState<ExerciseSetItem | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = React.useState<string | null>(null);
+
+  // Direct Attempt Modal State
+  const [attemptModalExercise, setAttemptModalExercise] = React.useState<ExerciseItem | null>(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -340,88 +345,14 @@ export function SubjectExercisesTab({
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
-            {filteredExercises.map((ex, idx) => (
-              <div
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredExercises.map((ex) => (
+              <ExerciseCard
                 key={ex.id}
-                onClick={() => setSelectedExerciseId(ex.id)}
-                className="flex items-center justify-between p-3.5 bg-neutral-950/80 hover:bg-neutral-900 border border-neutral-800 hover:border-purple-500/50 rounded-xl cursor-pointer transition-all group shadow-sm"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="font-mono text-neutral-500 text-xs w-6 shrink-0">
-                    {idx + 1}.
-                  </span>
-
-                  {ex.referenceNumber && (
-                    <Badge variant="outline" className="font-mono text-xs border-purple-800/80 text-purple-300 shrink-0">
-                      {ex.referenceNumber}
-                    </Badge>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-neutral-100 group-hover:text-purple-300 transition-colors text-xs truncate">
-                        {ex.title}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-400 flex-wrap">
-                      {ex.topicTitle && (
-                        <span className="flex items-center gap-1 text-neutral-400">
-                          <BookOpen className="h-3 w-3 text-neutral-500" />
-                          {ex.topicTitle}
-                        </span>
-                      )}
-
-                      {ex.exerciseSetTitle && (
-                        <span className="flex items-center gap-1 text-purple-300">
-                          • {ex.exerciseSetTitle}
-                        </span>
-                      )}
-
-                      {ex.attempts && ex.attempts.length > 0 && (
-                        <span className="text-neutral-500">
-                          • {ex.attempts.length} tentativa(s)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 shrink-0">
-                  {ex.status === "RESOLVED" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Resolvido
-                    </span>
-                  )}
-                  {ex.status === "PARTIALLY_CORRECT" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800">
-                      <AlertTriangle className="h-3 w-3" />
-                      Parcial
-                    </span>
-                  )}
-                  {ex.status === "WRONG" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800">
-                      <XCircle className="h-3 w-3" />
-                      Errado
-                    </span>
-                  )}
-                  {ex.status === "REVIEW" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/80 text-purple-300 border border-purple-800">
-                      <RotateCcw className="h-3 w-3" />
-                      Refazer
-                    </span>
-                  )}
-                  {ex.status === "PENDING" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-neutral-900 text-neutral-400 border border-neutral-800">
-                      Pendente
-                    </span>
-                  )}
-
-                  <ChevronRight className="h-4 w-4 text-neutral-500 group-hover:text-purple-400 transition-colors" />
-                </div>
-              </div>
+                exercise={ex}
+                onOpenDetail={(item) => setSelectedExerciseId(item.id)}
+                onNewAttempt={(item) => setAttemptModalExercise(item)}
+              />
             ))}
           </div>
         )
@@ -475,6 +406,18 @@ export function SubjectExercisesTab({
         }}
         onSuccess={loadData}
       />
+
+      {/* Modal 5: Direct Attempt Register Modal */}
+      {attemptModalExercise && (
+        <AttemptRegisterModal
+          open={!!attemptModalExercise}
+          onOpenChange={(open) => !open && setAttemptModalExercise(null)}
+          exerciseId={attemptModalExercise.id}
+          exerciseTitle={attemptModalExercise.title}
+          subjectId={subjectId}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 }

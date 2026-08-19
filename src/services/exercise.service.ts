@@ -405,13 +405,21 @@ export async function createExercise(
     }
   }
 
+  const resolvedTitle =
+    data.title?.trim() ||
+    (data.referenceNumber?.trim()
+      ? `Questão ${data.referenceNumber.trim()}`
+      : data.statement?.trim()
+      ? data.statement.trim().slice(0, 50)
+      : "Exercício");
+
   const [created] = await db
     .insert(exercises)
     .values({
       subjectId: data.subjectId,
       exerciseSetId: data.exerciseSetId || null,
       topicId: data.topicId || null,
-      title: data.title.trim(),
+      title: resolvedTitle,
       referenceNumber: data.referenceNumber?.trim() || null,
       statement: data.statement?.trim() || null,
       source: data.source?.trim() || null,
@@ -476,7 +484,7 @@ export async function updateExercise(
   const [updated] = await db
     .update(exercises)
     .set({
-      ...(data.title !== undefined ? { title: data.title.trim() } : {}),
+      ...(data.title !== undefined && data.title !== null ? { title: data.title.trim() } : {}),
       ...(data.referenceNumber !== undefined ? { referenceNumber: data.referenceNumber?.trim() || null } : {}),
       ...(data.statement !== undefined ? { statement: data.statement?.trim() || null } : {}),
       ...(data.source !== undefined ? { source: data.source?.trim() || null } : {}),

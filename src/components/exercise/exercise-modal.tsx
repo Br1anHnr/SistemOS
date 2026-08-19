@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Upload, Trash2, Loader2, BookOpen, ListOrdered } from "lucide-react";
+import {
+  Upload,
+  Trash2,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+  BookOpen,
+  ListOrdered,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -41,39 +51,46 @@ export function ExerciseModal({
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const [title, setTitle] = React.useState<string>("");
+  // Core fields
   const [referenceNumber, setReferenceNumber] = React.useState<string>("");
+  const [statement, setStatement] = React.useState<string>("");
+  const [statementPhotos, setStatementPhotos] = React.useState<StatementPhoto[]>([]);
+
+  // Secondary fields (collapsible)
+  const [showMoreOptions, setShowMoreOptions] = React.useState<boolean>(false);
+  const [title, setTitle] = React.useState<string>("");
   const [topicId, setTopicId] = React.useState<string>("");
   const [exerciseSetId, setExerciseSetId] = React.useState<string>("");
   const [difficulty, setDifficulty] = React.useState<number>(3);
-  const [statement, setStatement] = React.useState<string>("");
   const [source, setSource] = React.useState<string>("");
   const [sourcePage, setSourcePage] = React.useState<string>("");
-  const [statementPhotos, setStatementPhotos] = React.useState<StatementPhoto[]>([]);
+
   const [loading, setLoading] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     if (open) {
       if (exerciseToEdit) {
-        setTitle(exerciseToEdit.title);
         setReferenceNumber(exerciseToEdit.referenceNumber || "");
-        setTopicId(exerciseToEdit.topicId || "");
-        setExerciseSetId(exerciseToEdit.exerciseSetId || "");
-        setDifficulty(exerciseToEdit.difficulty ?? 3);
         setStatement(exerciseToEdit.statement || "");
+        setTitle(exerciseToEdit.title || "");
+        setTopicId(exerciseToEdit.topicId || defaultTopicId || "");
+        setExerciseSetId(exerciseToEdit.exerciseSetId || defaultExerciseSetId || "");
+        setDifficulty(exerciseToEdit.difficulty ?? 3);
         setSource(exerciseToEdit.source || "");
         setSourcePage(exerciseToEdit.sourcePage ? exerciseToEdit.sourcePage.toString() : "");
         setStatementPhotos([]);
+        setShowMoreOptions(!!(exerciseToEdit.source || exerciseToEdit.sourcePage || exerciseToEdit.exerciseSetId));
       } else {
-        setTitle("");
         setReferenceNumber("");
+        setStatement("");
+        setTitle("");
         setTopicId(defaultTopicId || "");
         setExerciseSetId(defaultExerciseSetId || "");
         setDifficulty(3);
-        setStatement("");
         setSource("");
         setSourcePage("");
         setStatementPhotos([]);
+        setShowMoreOptions(false);
       }
       setLoading(false);
     }
@@ -108,16 +125,32 @@ export function ExerciseModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      toast("O título do exercício é obrigatório.", "error");
+
+    const hasText = statement.trim().length > 0;
+    const hasPhotos = statementPhotos.length > 0;
+    const hasRef = referenceNumber.trim().length > 0;
+    const hasCustomTitle = title.trim().length > 0;
+
+    // Minimum requirement: Text OR Photo OR Ref/Title
+    if (!hasText && !hasPhotos && !hasRef && !hasCustomTitle) {
+      toast("Adicione pelo menos um texto de enunciado, uma imagem ou uma identificação (ex: Q01).", "error");
       return;
     }
 
     setLoading(true);
     try {
+      // Auto derive title if not explicitly provided
+      const derivedTitle =
+        title.trim() ||
+        (referenceNumber.trim()
+          ? `Questão ${referenceNumber.trim()}`
+          : statement.trim()
+          ? statement.trim().slice(0, 50)
+          : "Exercício");
+
       if (exerciseToEdit) {
         const res = await updateExerciseAction(exerciseToEdit.id, subjectId, {
-          title: title.trim(),
+          title: derivedTitle,
           referenceNumber: referenceNumber.trim() || null,
           topicId: topicId || null,
           exerciseSetId: exerciseSetId || null,
@@ -128,7 +161,7 @@ export function ExerciseModal({
         });
 
         if (res.success) {
-          toast("Exercício atualizado com sucesso!");
+          toast("Exercício atualizado!");
           onOpenChange(false);
           onSuccess?.();
         } else {
@@ -156,7 +189,7 @@ export function ExerciseModal({
 
         const res = await createExerciseAction({
           subjectId,
-          title: title.trim(),
+          title: derivedTitle,
           referenceNumber: referenceNumber.trim() || null,
           topicId: topicId || null,
           exerciseSetId: exerciseSetId || null,
@@ -168,7 +201,7 @@ export function ExerciseModal({
         });
 
         if (res.success) {
-          toast("Exercício cadastrado com sucesso!");
+          toast("Exercício adicionado com sucesso!");
           onOpenChange(false);
           onSuccess?.();
         } else {
@@ -189,9 +222,12 @@ export function ExerciseModal({
       <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 border-b border-neutral-800 bg-neutral-950 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-neutral-100">
-            {exerciseToEdit ? "Editar Exercício" : "Novo Exercício"}
-          </h3>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-400" />
+            <h3 className="text-sm font-semibold text-neutral-100">
+              {exerciseToEdit ? "Editar Exercício" : "Novo Exercício"}
+            </h3>
+          </div>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -203,197 +239,215 @@ export function ExerciseModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
-          {/* Reference & Title */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1">
-                Ref / N° (opcional)
-              </label>
-              <Input
-                placeholder="Ex: Q01, 3.14"
-                value={referenceNumber}
-                onChange={(e) => setReferenceNumber(e.target.value)}
-                className="bg-neutral-950 border-neutral-800 text-neutral-100 text-xs h-9"
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-neutral-300 font-medium mb-1">
-                Título do Exercício *
-              </label>
-              <Input
-                placeholder="Ex: Cálculo da Tensão de Cisalhamento"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                className="bg-neutral-950 border-neutral-800 text-neutral-100 text-xs h-9"
-              />
-            </div>
-          </div>
-
-          {/* Topic / Chapter Selector & Exercise Set Selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1 flex items-center gap-1">
-                <BookOpen className="h-3 w-3 text-neutral-400" />
-                Vincular ao Capítulo / Tópico
-              </label>
-              <select
-                value={topicId}
-                onChange={(e) => setTopicId(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2.5 py-2 text-xs text-neutral-200 focus:outline-none focus:border-purple-500"
-              >
-                <option value="">Nenhum capítulo (Geral)</option>
-                {topicsList.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1 flex items-center gap-1">
-                <ListOrdered className="h-3 w-3 text-neutral-400" />
-                Lista de Exercícios
-              </label>
-              <select
-                value={exerciseSetId}
-                onChange={(e) => setExerciseSetId(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2.5 py-2 text-xs text-neutral-200 focus:outline-none focus:border-purple-500"
-              >
-                <option value="">Exercício Avulso (Sem lista)</option>
-                {exerciseSetsList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Difficulty (1 to 5) */}
-          <div>
-            <label className="block text-neutral-300 font-medium mb-1.5">
-              Dificuldade estimada (1 a 5)
-            </label>
-            <div className="flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => setDifficulty(lvl)}
-                  className={`flex-1 h-8 rounded-md text-xs font-semibold transition-colors ${
-                    difficulty === lvl
-                      ? "bg-purple-600 text-white shadow-sm"
-                      : "bg-neutral-950 text-neutral-400 border border-neutral-800 hover:bg-neutral-800 hover:text-white"
-                  }`}
-                >
-                  {lvl}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Statement Text */}
+          {/* Reference / Number */}
           <div>
             <label className="block text-neutral-300 font-medium mb-1">
-              Enunciado / Descrição do Problema
+              Número / Referência <span className="text-neutral-500 font-normal">(opcional)</span>
             </label>
-            <textarea
-              rows={3}
-              placeholder="Digite o texto da questão ou dados do problema..."
-              value={statement}
-              onChange={(e) => setStatement(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-md p-2.5 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:border-purple-500 resize-none text-xs"
+            <Input
+              placeholder="Ex: Q01, 3.14, Ex. 7"
+              value={referenceNumber}
+              onChange={(e) => setReferenceNumber(e.target.value)}
+              className="bg-neutral-950 border-neutral-800 text-neutral-100 text-xs h-9 placeholder:text-neutral-600 font-mono"
             />
           </div>
 
-          {/* Statement Images Upload (for new exercises) */}
-          {!exerciseToEdit && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-neutral-300 font-medium flex items-center gap-1">
-                  <Upload className="h-3 w-3 text-neutral-400" />
-                  Imagens do Enunciado (opcional)
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-6 text-[11px] border-neutral-800 text-neutral-300 hover:text-white"
-                >
-                  + Anexar Imagem
-                </Button>
-              </div>
+          {/* Enunciado (Texto ou Imagem) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-neutral-200 font-semibold uppercase tracking-wider text-[11px]">
+                Enunciado da Questão
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-6 text-[11px] border-purple-800/70 text-purple-300 hover:bg-purple-950/40 gap-1"
+              >
+                <ImageIcon className="h-3 w-3" />
+                + Adicionar Imagem
+              </Button>
+            </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/jpg"
-                multiple
-                onChange={handleFilesSelected}
-                className="hidden"
-              />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/jpg"
+              multiple
+              onChange={handleFilesSelected}
+              className="hidden"
+            />
 
-              {statementPhotos.length > 0 && (
-                <div className="space-y-1.5 mt-2">
-                  {statementPhotos.map((photo, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2 p-1.5 bg-neutral-950 rounded border border-neutral-800"
-                    >
+            <textarea
+              rows={3}
+              placeholder="Escreva o texto do problema ou dados da questão..."
+              value={statement}
+              onChange={(e) => setStatement(e.target.value)}
+              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-purple-500 resize-none text-xs leading-relaxed"
+            />
+
+            {/* Previews of attached statement images */}
+            {statementPhotos.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {statementPhotos.map((photo, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group border border-neutral-800 bg-neutral-950 rounded-lg overflow-hidden flex flex-col"
+                  >
+                    <div className="aspect-video w-full overflow-hidden bg-neutral-900 flex items-center justify-center">
                       <img
                         src={photo.previewUrl}
                         alt="Prévia"
-                        className="h-9 w-9 object-cover rounded border border-neutral-800 shrink-0"
+                        className="w-full h-full object-cover"
                       />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[11px] text-neutral-300 truncate block">
-                          {photo.file.name}
-                        </span>
-                      </div>
+                    </div>
+
+                    <div className="p-1.5 flex items-center justify-between gap-1 bg-neutral-950 border-t border-neutral-850">
+                      <span className="text-[10px] text-neutral-300 truncate max-w-[120px]">
+                        {photo.file.name}
+                      </span>
                       <button
                         type="button"
                         onClick={() => handleRemovePhoto(idx)}
-                        className="p-1 text-neutral-500 hover:text-red-400"
+                        className="p-1 text-neutral-500 hover:text-red-400 rounded"
+                        title="Remover imagem"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Source and Page */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1">
-                Fonte / Bibliografia (opcional)
-              </label>
-              <Input
-                placeholder="Ex: Halliday Vol 2"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                className="bg-neutral-950 border-neutral-800 text-neutral-100 text-xs h-9"
-              />
-            </div>
-            <div>
-              <label className="block text-neutral-300 font-medium mb-1">
-                Página da Fonte (opcional)
-              </label>
-              <Input
-                type="number"
-                min="1"
-                placeholder="Ex: 48"
-                value={sourcePage}
-                onChange={(e) => setSourcePage(e.target.value)}
-                className="bg-neutral-950 border-neutral-800 text-neutral-100 text-xs h-9"
-              />
-            </div>
+          {/* Collapsible Secondary Options */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowMoreOptions((prev) => !prev)}
+              className="flex items-center gap-1.5 text-neutral-400 hover:text-neutral-200 text-xs font-medium py-1 transition-colors"
+            >
+              {showMoreOptions ? (
+                <ChevronUp className="h-3.5 w-3.5 text-purple-400" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-neutral-500" />
+              )}
+              <span>{showMoreOptions ? "Ocultar opções secundárias" : "Mais opções (título, lista, fonte, dificuldade...)"}</span>
+            </button>
+
+            {showMoreOptions && (
+              <div className="mt-3 p-3.5 bg-neutral-950/70 border border-neutral-800/80 rounded-lg space-y-3 animate-in fade-in duration-150">
+                {/* Custom Title */}
+                <div>
+                  <label className="block text-neutral-400 font-medium mb-1">
+                    Título personalizado (opcional)
+                  </label>
+                  <Input
+                    placeholder="Ex: Teorema de Stevin no Tubo"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="bg-neutral-900 border-neutral-800 text-neutral-100 text-xs h-8"
+                  />
+                </div>
+
+                {/* Topic selector (only if not pre-set) */}
+                {!defaultTopicId && topicsList.length > 0 && (
+                  <div>
+                    <label className="block text-neutral-400 font-medium mb-1 flex items-center gap-1">
+                      <BookOpen className="h-3 w-3" />
+                      Vincular ao Capítulo
+                    </label>
+                    <select
+                      value={topicId}
+                      onChange={(e) => setTopicId(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="">Nenhum capítulo (Geral)</option>
+                      {topicsList.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Exercise Set selector (only if not pre-set) */}
+                {!defaultExerciseSetId && exerciseSetsList.length > 0 && (
+                  <div>
+                    <label className="block text-neutral-400 font-medium mb-1 flex items-center gap-1">
+                      <ListOrdered className="h-3 w-3" />
+                      Lista de Exercícios
+                    </label>
+                    <select
+                      value={exerciseSetId}
+                      onChange={(e) => setExerciseSetId(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="">Exercício Avulso (Sem lista)</option>
+                      {exerciseSetsList.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Difficulty */}
+                <div>
+                  <label className="block text-neutral-400 font-medium mb-1">
+                    Dificuldade (1 a 5)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4, 5].map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setDifficulty(lvl)}
+                        className={`flex-1 h-7 rounded text-xs font-semibold transition-colors ${
+                          difficulty === lvl
+                            ? "bg-purple-600 text-white"
+                            : "bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white"
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Source and Page */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-neutral-400 font-medium mb-1">
+                      Fonte / Livro
+                    </label>
+                    <Input
+                      placeholder="Ex: Halliday Vol 2"
+                      value={source}
+                      onChange={(e) => setSource(e.target.value)}
+                      className="bg-neutral-900 border-neutral-800 text-neutral-100 text-xs h-8"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-neutral-400 font-medium mb-1">
+                      Página
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="Ex: 48"
+                      value={sourcePage}
+                      onChange={(e) => setSourcePage(e.target.value)}
+                      className="bg-neutral-900 border-neutral-800 text-neutral-100 text-xs h-8"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer Submit */}
@@ -409,7 +463,7 @@ export function ExerciseModal({
             <Button
               type="submit"
               disabled={loading}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs h-9 px-4"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs h-9 px-4 shadow-sm"
             >
               {loading ? (
                 <>

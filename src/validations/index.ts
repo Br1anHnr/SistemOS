@@ -609,10 +609,7 @@ export const createExerciseSchema = z.object({
     .uuid("ID de disciplina inválido."),
   exerciseSetId: z.string().uuid("ID da lista inválido.").optional().nullable(),
   topicId: z.string().uuid("ID do tópico/capítulo inválido.").optional().nullable(),
-  title: z
-    .string({ required_error: "Título do exercício é obrigatório." })
-    .min(1, "O título do exercício não pode ficar em branco.")
-    .max(200, "O título do exercício deve ter no máximo 200 caracteres."),
+  title: z.string().max(200).optional().nullable(),
   referenceNumber: z.string().max(50).optional().nullable(),
   statement: z.string().optional().nullable(),
   source: z.string().max(200).optional().nullable(),

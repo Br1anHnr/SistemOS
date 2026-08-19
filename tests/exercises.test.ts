@@ -76,6 +76,34 @@ describe("Domain & Validations: Exercises (Exercícios)", () => {
       expect(result.statementImages?.length).toBe(1);
     });
 
+    it("should validate createExerciseSchema without explicit title when referenceNumber and image are provided", () => {
+      const valid = {
+        subjectId: validSubjectId,
+        referenceNumber: "Q01",
+        statementImages: [
+          {
+            filePath: "indexeddb://files/fig1.png",
+            mimeType: "image/png",
+            originalName: "figura1.png",
+          },
+        ],
+      };
+
+      const result = createExerciseSchema.parse(valid);
+      expect(result.referenceNumber).toBe("Q01");
+      expect(result.statementImages?.length).toBe(1);
+    });
+
+    it("should validate createExerciseSchema without explicit title when only statement text is provided", () => {
+      const valid = {
+        subjectId: validSubjectId,
+        statement: "Um corpo de massa m desliza por um plano inclinado...",
+      };
+
+      const result = createExerciseSchema.parse(valid);
+      expect(result.statement).toBe("Um corpo de massa m desliza por um plano inclinado...");
+    });
+
     it("should validate createExerciseAttemptSchema with resolution photos", () => {
       const valid = {
         exerciseId: validExerciseId,

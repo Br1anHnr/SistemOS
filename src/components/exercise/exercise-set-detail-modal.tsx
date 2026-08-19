@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExerciseSetItem, ExerciseItem } from "@/domain/exercises";
 import { getLocalFileUrl } from "@/lib/file-storage";
+import { ExerciseCard } from "./exercise-card";
 
 interface ExerciseSetDetailModalProps {
   open: boolean;
@@ -67,7 +68,7 @@ export function ExerciseSetDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 border-b border-neutral-800 bg-neutral-950 flex items-center justify-between">
           <div className="min-w-0 flex-1">
@@ -205,70 +206,13 @@ export function ExerciseSetDetailModal({
                 </Button>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                {setExercises.map((ex, idx) => (
-                  <div
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {setExercises.map((ex) => (
+                  <ExerciseCard
                     key={ex.id}
-                    onClick={() => onOpenExercise(ex)}
-                    className="flex items-center justify-between p-3 bg-neutral-950/80 hover:bg-neutral-900 border border-neutral-800 hover:border-purple-500/50 rounded-lg cursor-pointer transition-all group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono text-neutral-500 text-xs w-5 shrink-0">
-                        {idx + 1}.
-                      </span>
-
-                      {ex.referenceNumber && (
-                        <Badge variant="outline" className="font-mono text-[10px] border-neutral-750 text-neutral-300 shrink-0">
-                          {ex.referenceNumber}
-                        </Badge>
-                      )}
-
-                      <span className="font-medium text-neutral-200 group-hover:text-purple-300 transition-colors truncate">
-                        {ex.title}
-                      </span>
-
-                      {ex.topicTitle && (
-                        <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-900 text-neutral-400 border border-neutral-800 truncate max-w-[140px]">
-                          <BookOpen className="h-2.5 w-2.5" />
-                          {ex.topicTitle}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {ex.status === "RESOLVED" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Resolvido
-                        </span>
-                      )}
-                      {ex.status === "PARTIALLY_CORRECT" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800">
-                          <AlertTriangle className="h-3 w-3" />
-                          Parcial
-                        </span>
-                      )}
-                      {ex.status === "WRONG" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800">
-                          <XCircle className="h-3 w-3" />
-                          Errado
-                        </span>
-                      )}
-                      {ex.status === "REVIEW" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/80 text-purple-300 border border-purple-800">
-                          <RotateCcw className="h-3 w-3" />
-                          Refazer
-                        </span>
-                      )}
-                      {ex.status === "PENDING" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-900 text-neutral-400 border border-neutral-800">
-                          Pendente
-                        </span>
-                      )}
-
-                      <ChevronRight className="h-4 w-4 text-neutral-500 group-hover:text-purple-400 transition-colors" />
-                    </div>
-                  </div>
+                    exercise={ex}
+                    onOpenDetail={(item) => onOpenExercise(item)}
+                  />
                 ))}
               </div>
             )}

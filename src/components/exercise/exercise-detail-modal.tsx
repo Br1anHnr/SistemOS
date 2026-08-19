@@ -17,11 +17,16 @@ import {
   Calendar,
   Image as ImageIcon,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  History,
+  FileText,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { ExerciseItem } from "@/domain/exercises";
+import { ExerciseItem, ExerciseAttemptItem } from "@/domain/exercises";
 import {
   getExerciseByIdAction,
   deleteExerciseAction,
@@ -55,6 +60,7 @@ export function ExerciseDetailModal({
   const [exercise, setExercise] = React.useState<ExerciseItem | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [attemptModalOpen, setAttemptModalOpen] = React.useState<boolean>(false);
+  const [showHistory, setShowHistory] = React.useState<boolean>(false);
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = React.useState<boolean>(false);
@@ -169,19 +175,24 @@ export function ExerciseDetailModal({
 
   if (!open || !exerciseId) return null;
 
+  // Split attempts into latest and previous
+  const attempts = exercise?.attempts || [];
+  const latestAttempt = attempts.length > 0 ? attempts[0] : null;
+  const previousAttempts = attempts.length > 1 ? attempts.slice(1) : [];
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
           {/* Header */}
-          <div className="p-4 border-b border-neutral-800 bg-neutral-950 flex items-center justify-between">
+          <div className="p-4 border-b border-neutral-800 bg-neutral-950 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               {exercise?.referenceNumber && (
-                <Badge variant="outline" className="font-mono text-xs border-purple-800 text-purple-300">
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-purple-950 border border-purple-800 text-purple-300 shrink-0">
                   {exercise.referenceNumber}
-                </Badge>
+                </span>
               )}
-              <h3 className="text-base font-semibold text-neutral-100 truncate">
+              <h3 className="text-sm font-semibold text-neutral-100 truncate">
                 {exercise?.title || "Carregando exercício..."}
               </h3>
             </div>
@@ -218,7 +229,7 @@ export function ExerciseDetailModal({
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="text-neutral-400 hover:text-white p-1 rounded-md ml-2"
+                className="text-neutral-400 hover:text-white p-1 rounded-md ml-1"
               >
                 ✕
               </button>
@@ -226,43 +237,43 @@ export function ExerciseDetailModal({
           </div>
 
           {/* Modal Content */}
-          <div className="p-5 overflow-y-auto space-y-5 flex-1 text-xs">
+          <div className="p-5 overflow-y-auto space-y-6 flex-1 text-xs">
             {loading || !exercise ? (
-              <div className="py-12 text-center text-neutral-400">
+              <div className="py-16 text-center text-neutral-400">
                 Carregando detalhes do exercício...
               </div>
             ) : (
               <>
-                {/* Context Badges & Status Banner */}
-                <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-neutral-950/80 rounded-lg border border-neutral-800">
+                {/* Context & Status Banner */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-neutral-950/80 rounded-xl border border-neutral-800">
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Status Badge */}
                     {exercise.status === "RESOLVED" && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                        <CheckCircle2 className="h-3 w-3" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
                         Resolvido
                       </span>
                     )}
                     {exercise.status === "PARTIALLY_CORRECT" && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950/60 text-amber-300 border border-amber-800">
-                        <AlertTriangle className="h-3 w-3" />
-                        Parcial
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Parcialmente Correto
                       </span>
                     )}
                     {exercise.status === "WRONG" && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-950/60 text-rose-300 border border-rose-800">
-                        <XCircle className="h-3 w-3" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">
+                        <XCircle className="h-3.5 w-3.5" />
                         Errou
                       </span>
                     )}
                     {exercise.status === "REVIEW" && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950/60 text-purple-300 border border-purple-800">
-                        <RotateCcw className="h-3 w-3" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-950/80 text-purple-300 border border-purple-800">
+                        <RotateCcw className="h-3.5 w-3.5" />
                         Para Refazer
                       </span>
                     )}
                     {exercise.status === "PENDING" && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-neutral-900 text-neutral-400 border border-neutral-800">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-neutral-900 text-neutral-400 border border-neutral-800">
                         Pendente
                       </span>
                     )}
@@ -277,17 +288,17 @@ export function ExerciseDetailModal({
 
                     {/* Set Link */}
                     {exercise.exerciseSetTitle && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-neutral-900 text-neutral-300 border border-neutral-800">
-                        <ListOrdered className="h-3 w-3 text-neutral-400" />
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950/40 text-purple-300 border border-purple-800/60">
+                        <ListOrdered className="h-3 w-3 text-purple-400" />
                         {exercise.exerciseSetTitle}
                       </span>
                     )}
 
-                    {/* Assessment Link */}
-                    {exercise.assessmentTitle && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950/40 text-blue-300 border border-blue-800/60">
-                        <Calendar className="h-3 w-3 text-blue-400" />
-                        {exercise.assessmentTitle}
+                    {/* Source */}
+                    {exercise.source && (
+                      <span className="text-neutral-400 text-[11px]">
+                        Fonte: {exercise.source}
+                        {exercise.sourcePage ? ` (pág. ${exercise.sourcePage})` : ""}
                       </span>
                     )}
                   </div>
@@ -304,54 +315,54 @@ export function ExerciseDetailModal({
                     }`}
                   >
                     <RotateCcw className="h-3 w-3" />
-                    {exercise.needsReview ? "Marcado para refazer" : "Marcar para refazer"}
+                    {exercise.needsReview ? "Desmarcar de refazer" : "Marcar para refazer"}
                   </Button>
                 </div>
 
-                {/* Problem Statement Area */}
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
+                {/* 1. ENUNCIADO EM DESTAQUE */}
+                <div className="space-y-3 p-4 bg-neutral-950 rounded-xl border border-neutral-800">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
+                    <FileText className="h-3.5 w-3.5" />
                     Enunciado da Questão
                   </div>
+
                   {exercise.statement ? (
-                    <div className="p-3.5 bg-neutral-950 rounded-lg border border-neutral-800 text-neutral-200 text-xs leading-relaxed whitespace-pre-wrap font-sans">
+                    <div className="text-neutral-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans">
                       {exercise.statement}
                     </div>
                   ) : (
-                    <div className="p-3 bg-neutral-950/40 rounded-lg border border-neutral-800/80 text-neutral-500 italic text-xs">
-                      Nenhum texto de enunciado cadastrado.
+                    <div className="text-neutral-500 italic text-xs">
+                      Sem texto de enunciado cadastrado.
                     </div>
                   )}
 
-                  {/* Statement Images Gallery */}
+                  {/* Statement Images Gallery (Large preview) */}
                   {exercise.attachments && exercise.attachments.length > 0 && (
                     <div className="pt-2">
-                      <div className="text-[11px] font-medium text-neutral-400 mb-1.5 flex items-center gap-1">
-                        <ImageIcon className="h-3 w-3" />
+                      <div className="text-[11px] font-medium text-neutral-400 mb-2 flex items-center gap-1.5">
+                        <ImageIcon className="h-3.5 w-3.5 text-purple-400" />
                         Imagens do Enunciado ({exercise.attachments.length})
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {exercise.attachments.map((att) => {
                           const src = resolvedUrls[att.filePath] || att.filePath;
                           return (
                             <div
                               key={att.id}
                               onClick={() => openPhotoLightbox(att.filePath, att.caption, att.originalName)}
-                              className="group relative cursor-pointer border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950 hover:border-purple-500 transition-all aspect-video flex flex-col"
+                              className="group relative cursor-pointer border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900 hover:border-purple-500 transition-all flex flex-col"
                             >
-                              <img
-                                src={src}
-                                alt={att.originalName}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                                <ExternalLink className="h-4 w-4" />
+                              <div className="max-h-64 overflow-hidden flex items-center justify-center bg-black/40">
+                                <img
+                                  src={src}
+                                  alt={att.originalName}
+                                  className="w-full h-auto object-contain max-h-64 group-hover:scale-102 transition-transform duration-200"
+                                />
                               </div>
-                              {att.caption && (
-                                <div className="absolute bottom-0 inset-x-0 bg-black/75 p-1 text-[10px] text-neutral-200 truncate">
-                                  {att.caption}
-                                </div>
-                              )}
+                              <div className="p-2 bg-neutral-950 border-t border-neutral-850 flex items-center justify-between text-[11px] text-neutral-300">
+                                <span className="truncate">{att.caption || att.originalName}</span>
+                                <ExternalLink className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                              </div>
                             </div>
                           );
                         })}
@@ -360,174 +371,255 @@ export function ExerciseDetailModal({
                   )}
                 </div>
 
-                {/* Attempts Timeline History */}
-                <div className="pt-2 space-y-3">
+                {/* 2. MINHA RESOLUÇÃO (FOCO PRINCIPAL) */}
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
-                      Histórico de Tentativas ({exercise.attempts?.length || 0})
+                    <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200 uppercase tracking-wider">
+                      <Camera className="h-3.5 w-3.5 text-purple-400" />
+                      Minha Resolução
                     </div>
 
                     <Button
                       size="sm"
                       onClick={() => setAttemptModalOpen(true)}
-                      className="h-7 text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium gap-1"
+                      className="h-7 text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium gap-1 shadow-sm"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Registrar Tentativa
+                      {latestAttempt ? "Nova Tentativa" : "Registrar Resolução"}
                     </Button>
                   </div>
 
-                  {(!exercise.attempts || exercise.attempts.length === 0) ? (
-                    <div className="p-6 text-center bg-neutral-950/40 rounded-lg border border-neutral-800/80">
+                  {!latestAttempt ? (
+                    /* Empty state: No resolution yet */
+                    <div className="p-8 text-center bg-neutral-950/60 rounded-xl border border-neutral-800 space-y-3">
                       <p className="text-neutral-400 text-xs">
-                        Nenhuma tentativa registrada ainda.
+                        Você ainda não resolveu este exercício.
                       </p>
                       <Button
-                        variant="outline"
                         size="sm"
                         onClick={() => setAttemptModalOpen(true)}
-                        className="mt-3 text-xs border-purple-800 text-purple-300 hover:bg-purple-950/40"
+                        className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium"
                       >
-                        + Registrar 1ª Tentativa
+                        + Registrar Resolução
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {exercise.attempts.map((att, idx) => {
-                        const attemptNum = exercise.attempts!.length - idx;
-                        const dateStr = new Date(att.attemptedAt).toLocaleDateString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        });
+                    /* Show Latest Attempt Prominently */
+                    <div className="p-4 bg-neutral-950 rounded-xl border border-neutral-800 space-y-3">
+                      {/* Attempt Header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-neutral-200 text-xs sm:text-sm">
+                            Última Resolução (Tentativa #{attempts.length})
+                          </span>
+                          <span className="text-[11px] text-neutral-500 font-mono">
+                            {new Date(latestAttempt.attemptedAt).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
 
-                        return (
-                          <div
-                            key={att.id}
-                            className="p-3.5 bg-neutral-950 rounded-lg border border-neutral-800 space-y-2.5"
+                        <div className="flex items-center gap-2">
+                          {latestAttempt.result === "CORRECT" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Acertei
+                            </span>
+                          )}
+                          {latestAttempt.result === "PARTIALLY_CORRECT" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Parcial
+                            </span>
+                          )}
+                          {latestAttempt.result === "INCORRECT" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">
+                              <XCircle className="h-3.5 w-3.5" />
+                              Errei
+                            </span>
+                          )}
+                          {latestAttempt.result === "NOT_COMPLETED" && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-purple-950/80 text-purple-300 border border-purple-800">
+                              <HelpCircle className="h-3.5 w-3.5" />
+                              Não Consegui
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAttempt(latestAttempt.id)}
+                            className="text-neutral-500 hover:text-red-400 p-1"
+                            title="Excluir tentativa"
                           >
-                            {/* Attempt Header */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-neutral-200">
-                                  Tentativa #{attemptNum}
-                                </span>
-                                <span className="text-[11px] text-neutral-500 font-mono">
-                                  {dateStr}
-                                </span>
-                              </div>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
 
-                              <div className="flex items-center gap-2">
-                                {att.result === "CORRECT" && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Correto
-                                  </span>
-                                )}
-                                {att.result === "PARTIALLY_CORRECT" && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    Parcial
-                                  </span>
-                                )}
-                                {att.result === "INCORRECT" && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800">
-                                    <XCircle className="h-3 w-3" />
-                                    Errado
-                                  </span>
-                                )}
-                                {att.result === "NOT_COMPLETED" && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/80 text-purple-300 border border-purple-800">
-                                    <HelpCircle className="h-3 w-3" />
-                                    Não Conseguiu
-                                  </span>
-                                )}
+                      {/* Duration & Difficulty */}
+                      {(latestAttempt.durationMinutes || latestAttempt.difficultyPerceived) && (
+                        <div className="flex items-center gap-4 text-[11px] text-neutral-400">
+                          {latestAttempt.durationMinutes !== null && latestAttempt.durationMinutes !== undefined && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-neutral-500" />
+                              {latestAttempt.durationMinutes} min
+                            </span>
+                          )}
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteAttempt(att.id)}
-                                  className="text-neutral-500 hover:text-red-400 p-1 transition-colors"
-                                  title="Excluir tentativa"
+                          {latestAttempt.difficultyPerceived && (
+                            <span className="flex items-center gap-1">
+                              <Gauge className="h-3 w-3 text-neutral-500" />
+                              Dificuldade: {latestAttempt.difficultyPerceived}/5
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Observations / Notes */}
+                      {latestAttempt.notes && (
+                        <div className="p-3 bg-neutral-900/80 rounded-lg border border-neutral-850 text-neutral-200 text-xs leading-relaxed">
+                          <span className="text-[10px] text-neutral-400 font-semibold uppercase block mb-1">
+                            Observação da Resolução:
+                          </span>
+                          {latestAttempt.notes}
+                        </div>
+                      )}
+
+                      {/* Notebook Resolution Photos (Large view) */}
+                      {latestAttempt.attachments && latestAttempt.attachments.length > 0 && (
+                        <div className="pt-2">
+                          <div className="text-[11px] font-medium text-neutral-400 mb-2 flex items-center gap-1">
+                            <Camera className="h-3.5 w-3.5 text-purple-400" />
+                            Fotos do Caderno ({latestAttempt.attachments.length}):
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {latestAttempt.attachments.map((photo) => {
+                              const src = resolvedUrls[photo.filePath] || photo.filePath;
+                              return (
+                                <div
+                                  key={photo.id}
+                                  className="relative group border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900 flex flex-col"
                                 >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Duration & Difficulty */}
-                            <div className="flex items-center gap-4 text-[11px] text-neutral-400">
-                              {att.durationMinutes !== null && att.durationMinutes !== undefined && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-neutral-500" />
-                                  {att.durationMinutes} min
-                                </span>
-                              )}
-
-                              {att.difficultyPerceived && (
-                                <span className="flex items-center gap-1">
-                                  <Gauge className="h-3 w-3 text-neutral-500" />
-                                  Dificuldade: {att.difficultyPerceived}/5
-                                </span>
-                              )}
-
-                              {att.needsReview && (
-                                <span className="text-amber-400 font-medium">
-                                  • Marcado para refazer
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Attempt Notes */}
-                            {att.notes && (
-                              <p className="text-neutral-300 text-xs bg-neutral-900/60 p-2 rounded border border-neutral-850">
-                                {att.notes}
-                              </p>
-                            )}
-
-                            {/* Notebook Photos Gallery */}
-                            {att.attachments && att.attachments.length > 0 && (
-                              <div className="pt-1">
-                                <div className="text-[10px] font-medium text-neutral-400 mb-1.5">
-                                  Fotos da Resolução no Caderno ({att.attachments.length}):
+                                  <div
+                                    onClick={() => openPhotoLightbox(photo.filePath, photo.caption, photo.originalName)}
+                                    className="max-h-72 overflow-hidden flex items-center justify-center bg-black/40 cursor-pointer"
+                                  >
+                                    <img
+                                      src={src}
+                                      alt={photo.caption || photo.originalName}
+                                      className="w-full h-auto object-contain max-h-72 group-hover:scale-102 transition-transform"
+                                    />
+                                  </div>
+                                  <div className="p-2 bg-neutral-950 border-t border-neutral-850 flex items-center justify-between text-[11px] text-neutral-300">
+                                    <span className="truncate">{photo.caption || photo.originalName}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePhoto(photo.id)}
+                                      className="text-neutral-500 hover:text-red-400 p-1"
+                                      title="Remover foto"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {att.attachments.map((photo) => {
-                                    const src = resolvedUrls[photo.filePath] || photo.filePath;
-                                    return (
-                                      <div
-                                        key={photo.id}
-                                        className="relative group border border-neutral-800 rounded-md overflow-hidden bg-neutral-900 w-24 h-24"
-                                      >
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. HISTÓRICO DE TENTATIVAS ANTERIORES (COLLAPSIBLE) */}
+                  {previousAttempts.length > 0 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowHistory((prev) => !prev)}
+                        className="flex items-center gap-1.5 text-neutral-400 hover:text-neutral-200 text-xs font-medium py-1 transition-colors"
+                      >
+                        <History className="h-3.5 w-3.5 text-purple-400" />
+                        <span>Histórico de tentativas anteriores ({previousAttempts.length})</span>
+                        {showHistory ? (
+                          <ChevronUp className="h-3.5 w-3.5 ml-1" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                        )}
+                      </button>
+
+                      {showHistory && (
+                        <div className="mt-3 space-y-3">
+                          {previousAttempts.map((att, idx) => {
+                            const attemptNum = attempts.length - 1 - idx;
+                            return (
+                              <div
+                                key={att.id}
+                                className="p-3 bg-neutral-950/70 rounded-lg border border-neutral-800 space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-neutral-300">
+                                      Tentativa #{attemptNum}
+                                    </span>
+                                    <span className="text-[10px] text-neutral-500 font-mono">
+                                      {new Date(att.attemptedAt).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    {att.result === "CORRECT" && (
+                                      <span className="text-[10px] font-semibold text-emerald-400">Acertei</span>
+                                    )}
+                                    {att.result === "PARTIALLY_CORRECT" && (
+                                      <span className="text-[10px] font-semibold text-amber-400">Parcial</span>
+                                    )}
+                                    {att.result === "INCORRECT" && (
+                                      <span className="text-[10px] font-semibold text-rose-400">Errei</span>
+                                    )}
+                                    {att.result === "NOT_COMPLETED" && (
+                                      <span className="text-[10px] font-semibold text-purple-400">Não Conseguiu</span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAttempt(att.id)}
+                                      className="text-neutral-500 hover:text-red-400 p-0.5"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {att.notes && (
+                                  <p className="text-neutral-300 text-xs bg-neutral-900/60 p-2 rounded">
+                                    {att.notes}
+                                  </p>
+                                )}
+
+                                {att.attachments && att.attachments.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 pt-1">
+                                    {att.attachments.map((photo) => {
+                                      const src = resolvedUrls[photo.filePath] || photo.filePath;
+                                      return (
                                         <img
+                                          key={photo.id}
                                           src={src}
                                           alt={photo.caption || photo.originalName}
                                           onClick={() => openPhotoLightbox(photo.filePath, photo.caption, photo.originalName)}
-                                          className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-transform"
+                                          className="w-16 h-16 object-cover rounded border border-neutral-800 cursor-pointer hover:scale-105 transition-transform"
                                         />
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeletePhoto(photo.id)}
-                                          className="absolute top-1 right-1 p-1 bg-black/80 rounded text-neutral-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                          title="Remover foto"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
-                                        {photo.caption && (
-                                          <div className="absolute bottom-0 inset-x-0 bg-black/80 p-0.5 text-[9px] text-neutral-200 text-center truncate">
-                                            {photo.caption}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

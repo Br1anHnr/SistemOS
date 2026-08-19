@@ -23,14 +23,27 @@ export const MASTERY_LEVELS = [
 ] as const;
 
 /**
- * Organizes flat topics array into a hierarchical tree (Parents -> Subtopics).
+ * Natural alphabetical and numerical comparator for topics (e.g. "Capítulo 1" before "Capítulo 2").
+ */
+export function compareTopicsNatural<T extends { title: string; orderIndex?: number }>(
+  a: T,
+  b: T
+): number {
+  if (a.orderIndex !== undefined && b.orderIndex !== undefined && a.orderIndex !== b.orderIndex) {
+    return a.orderIndex - b.orderIndex;
+  }
+  return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Organizes flat topics array into a hierarchical tree (Parents -> Subtopics), respecting natural order and orderIndex.
  */
 export function buildTopicTree<T extends TopicItem>(topics: T[]): Array<T & { subtopics: T[] }> {
   const parents: Array<T & { subtopics: T[] }> = [];
   const subtopicMap = new Map<string, T[]>();
 
-  // Sort by orderIndex
-  const sorted = [...topics].sort((a, b) => a.orderIndex - b.orderIndex);
+  // Sort by orderIndex / natural
+  const sorted = [...topics].sort(compareTopicsNatural);
 
   for (const t of sorted) {
     if (t.parentId) {
@@ -42,9 +55,10 @@ export function buildTopicTree<T extends TopicItem>(topics: T[]): Array<T & { su
 
   for (const t of sorted) {
     if (!t.parentId) {
+      const children = (subtopicMap.get(t.id) || []).sort(compareTopicsNatural);
       parents.push({
         ...t,
-        subtopics: subtopicMap.get(t.id) || [],
+        subtopics: children,
       });
     }
   }

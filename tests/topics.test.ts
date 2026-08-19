@@ -5,6 +5,7 @@ import {
   calculateMasteryDistribution,
   calculateEstimatedRemainingStudyHours,
   buildTopicTree,
+  compareTopicsNatural,
   TopicItem,
 } from "@/domain/topics";
 
@@ -85,6 +86,19 @@ describe("Domain: Topics & Mastery Calculations", () => {
 
     const remainingHours = calculateEstimatedRemainingStudyHours(topics);
     expect(remainingHours).toBe(7); // 3 + 4
+  });
+
+  it("should sort topics naturally by number (e.g. Capítulo 1 before Capítulo 2)", () => {
+    const unordered = [
+      { title: "Capítulo 10: Turbomáquinas" },
+      { title: "Capítulo 2: Conceitos Fundamentais" },
+      { title: "Capítulo 1: Apresentação e Introdução" },
+    ];
+
+    const sorted = [...unordered].sort(compareTopicsNatural);
+    expect(sorted[0].title).toBe("Capítulo 1: Apresentação e Introdução");
+    expect(sorted[1].title).toBe("Capítulo 2: Conceitos Fundamentais");
+    expect(sorted[2].title).toBe("Capítulo 10: Turbomáquinas");
   });
 
   it("should build hierarchical tree correctly with subtopics", () => {

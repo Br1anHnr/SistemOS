@@ -3,10 +3,6 @@
 import * as React from "react";
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +21,6 @@ import {
   deleteTopicAction,
   reorderTopicsAction,
 } from "@/actions/topic.actions";
-import {
-  createMaterialAction,
-  deleteMaterialAction,
-} from "@/actions/material.actions";
 import { TopicModal } from "@/components/topic/topic-modal";
 import { BatchTopicModal } from "@/components/topic/batch-topic-modal";
 import { PdfViewerModal } from "@/components/material/pdf-viewer-modal";
@@ -36,20 +28,18 @@ import { useToast } from "@/components/ui/toast";
 import {
   FileText,
   Plus,
-  Wand2,
   CheckCircle2,
   Circle,
   Clock,
   Trash2,
   Edit2,
-  ChevronUp,
   ChevronDown,
   ChevronRight,
   Sparkles,
   Award,
   Layers,
   Eye,
-  Upload,
+  GripVertical,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -115,6 +105,12 @@ export function SubjectTopicsTab({
   // Accordion expanded state for parent modules
   const [expandedParents, setExpandedParents] = React.useState<Record<string, boolean>>({});
 
+  // Drag and Drop state
+  const [draggedParentId, setDraggedParentId] = React.useState<string | null>(null);
+  const [dragOverParentId, setDragOverParentId] = React.useState<string | null>(null);
+  const [draggedSubId, setDraggedSubId] = React.useState<{ parentId: string; id: string } | null>(null);
+  const [dragOverSubId, setDragOverSubId] = React.useState<string | null>(null);
+
   // Domain calculations
   const progress = React.useMemo(() => calculateTopicProgress(topics), [topics]);
   const mastery = React.useMemo(() => calculateMasteryAverage(topics), [topics]);
@@ -122,7 +118,13 @@ export function SubjectTopicsTab({
   const remainingHours = React.useMemo(() => calculateEstimatedRemainingStudyHours(topics), [topics]);
 
   // Hierarchical Tree
-  const topicTree = React.useMemo(() => buildTopicTree(topics), [topics]);
+  const initialTree = React.useMemo(() => buildTopicTree(topics), [topics]);
+  const [topicTree, setTopicTree] = React.useState(initialTree);
+
+  // Synchronize tree when topics change
+  React.useEffect(() => {
+    setTopicTree(buildTopicTree(topics));
+  }, [topics]);
 
   // Map materials to topicId
   const materialsByTopicId = React.useMemo(() => {
@@ -184,30 +186,86 @@ export function SubjectTopicsTab({
     }
   };
 
-  const handleMove = async (
-    list: TopicWithAssessment[],
-    index: number,
-    direction: "UP" | "DOWN"
-  ) => {
-    if (direction === "UP" && index === 0) return;
-    if (direction === "DOWN" && index === list.length - 1) return;
+  // --- DRAG AND DROP HANDLERS FOR PARENT LESSONS ---
+  const handleDropParent = async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
 
-    const targetIndex = direction === "UP" ? index - 1 : index + 1;
-    const current = list[index];
-    const target = list[targetIndex];
+    const currentList = [...topicTree];
+    const sourceIndex = currentList.findIndex((p) => p.id === sourceId);
+    const targetIndex = currentList.findIndex((p) => p.id === targetId);
 
-    const reordered = [
-      { id: current.id, orderIndex: target.orderIndex },
-      { id: target.id, orderIndex: current.orderIndex },
-    ];
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    // Move item in array
+    const [moved] = currentList.splice(sourceIndex, 1);
+    currentList.splice(targetIndex, 0, moved);
+
+    // Optimistic UI update
+    setTopicTree(currentList);
+    setDraggedParentId(null);
+    setDragOverParentId(null);
+
+    // Build reordered payload
+    const reorderedPayload = currentList.map((item, idx) => ({
+      id: item.id,
+      orderIndex: idx + 1,
+    }));
 
     try {
-      const res = await reorderTopicsAction(subjectId, reordered);
+      const res = await reorderTopicsAction(subjectId, reorderedPayload);
       if (res.success) {
+        toast("Ordem de aulas atualizada!");
         router.refresh();
       }
     } catch {
-      toast("Erro ao reordenar.", "error");
+      toast("Erro ao salvar reordenação.", "error");
+    }
+  };
+
+  // --- DRAG AND DROP HANDLERS FOR SUBTOPICS ---
+  const handleDropSubtopic = async (
+    parentId: string,
+    sourceSubId: string,
+    targetSubId: string
+  ) => {
+    if (sourceSubId === targetSubId) return;
+
+    const currentList = [...topicTree];
+    const parentIndex = currentList.findIndex((p) => p.id === parentId);
+    if (parentIndex === -1) return;
+
+    const subtopics = [...currentList[parentIndex].subtopics];
+    const sourceIndex = subtopics.findIndex((s) => s.id === sourceSubId);
+    const targetIndex = subtopics.findIndex((s) => s.id === targetSubId);
+
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    const [moved] = subtopics.splice(sourceIndex, 1);
+    subtopics.splice(targetIndex, 0, moved);
+
+    currentList[parentIndex] = {
+      ...currentList[parentIndex],
+      subtopics,
+    };
+
+    // Optimistic UI update
+    setTopicTree(currentList);
+    setDraggedSubId(null);
+    setDragOverSubId(null);
+
+    const reorderedPayload = subtopics.map((item, idx) => ({
+      id: item.id,
+      orderIndex: idx + 1,
+    }));
+
+    try {
+      const res = await reorderTopicsAction(subjectId, reorderedPayload);
+      if (res.success) {
+        toast("Ordem dos subtópicos atualizada!");
+        router.refresh();
+      }
+    } catch {
+      toast("Erro ao salvar reordenação.", "error");
     }
   };
 
@@ -315,7 +373,7 @@ export function SubjectTopicsTab({
             Aulas & Conteúdos da Disciplina ({topics.length})
           </h3>
           <p className="text-xs text-neutral-400">
-            Cadastre suas aulas enviando os slides ou crie tópicos e subconteúdos para estudar.
+            Arraste os cards para priorizar a ordem de estudos e acesse os PDFs no leitor integrado.
           </p>
         </div>
 
@@ -324,7 +382,7 @@ export function SubjectTopicsTab({
           <Button
             size="sm"
             onClick={() => setBatchModalOpen(true)}
-            className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium"
+            className="text-xs bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm"
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Adicionar Aula / PDF
@@ -391,31 +449,71 @@ export function SubjectTopicsTab({
               materialsByTopicId.get(parent.id) ||
               materials.find((m) => m.title === parent.title || m.fileName.includes(parent.title));
 
+            const isDraggingThis = draggedParentId === parent.id;
+            const isDragOverThis = dragOverParentId === parent.id;
+
             return (
               <div
                 key={parent.id}
-                className="rounded-xl border border-neutral-800 bg-neutral-950/60 overflow-hidden shadow-sm"
+                draggable
+                onDragStart={(e) => {
+                  setDraggedParentId(parent.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverParentId !== parent.id) {
+                    setDragOverParentId(parent.id);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverParentId === parent.id) {
+                    setDragOverParentId(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedParentId) {
+                    handleDropParent(draggedParentId, parent.id);
+                  }
+                }}
+                onDragEnd={() => {
+                  setDraggedParentId(null);
+                  setDragOverParentId(null);
+                }}
+                className={`rounded-xl border transition-all duration-200 overflow-hidden shadow-sm ${
+                  isDraggingThis
+                    ? "opacity-40 scale-[0.99] border-dashed border-purple-500 bg-purple-950/20"
+                    : isDragOverThis
+                    ? "border-purple-500 ring-2 ring-purple-500/30 scale-[1.01] bg-neutral-900/90"
+                    : "border-neutral-800 bg-neutral-950/60 hover:border-neutral-750"
+                }`}
               >
                 {/* Parent Header */}
                 <div
                   className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-3.5 transition-colors ${
                     hasSubtopics
-                      ? "bg-neutral-900/60 hover:bg-neutral-900/90 cursor-pointer"
+                      ? "bg-neutral-900/60 hover:bg-neutral-900/90"
                       : isParentCompleted
                       ? "bg-emerald-950/10"
                       : "bg-neutral-900/30"
                   }`}
-                  onClick={() => hasSubtopics && toggleExpand(parent.id)}
                 >
-                  {/* Left: Chevron + Checkbox + Title */}
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  {/* Left: Drag Handle + Chevron + Checkbox + Title */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Drag Grip Handle */}
+                    <div
+                      className="cursor-grab active:cursor-grabbing p-1 text-neutral-500 hover:text-neutral-200 transition-colors shrink-0"
+                      title="Arrastar para reordenar prioridade"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </div>
+
                     {hasSubtopics ? (
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpand(parent.id);
-                        }}
+                        onClick={() => toggleExpand(parent.id)}
                         className="p-1 text-neutral-400 hover:text-white shrink-0"
                       >
                         {isExpanded ? (
@@ -426,10 +524,7 @@ export function SubjectTopicsTab({
                       </button>
                     ) : (
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleComplete(parent);
-                        }}
+                        onClick={() => handleToggleComplete(parent)}
                         className="p-1 text-neutral-500 hover:text-emerald-400 shrink-0"
                       >
                         {isParentCompleted ? (
@@ -442,7 +537,12 @@ export function SubjectTopicsTab({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-neutral-100">
+                        <span
+                          className={`text-sm font-semibold cursor-pointer ${
+                            isParentCompleted ? "text-neutral-300" : "text-neutral-100"
+                          }`}
+                          onClick={() => hasSubtopics && toggleExpand(parent.id)}
+                        >
                           {parent.title}
                         </span>
 
@@ -454,7 +554,7 @@ export function SubjectTopicsTab({
                               e.stopPropagation();
                               handleOpenPdf(linkedMaterial);
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition-colors shadow-sm"
                             title="Abrir PDF no leitor integrado"
                           >
                             <Eye className="h-3 w-3" />
@@ -491,10 +591,7 @@ export function SubjectTopicsTab({
                   </div>
 
                   {/* Right: Actions and Mastery */}
-                  <div
-                    className="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 shrink-0"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 shrink-0">
                     {/* Add Subtopic Button */}
                     <Button
                       size="sm"
@@ -534,22 +631,8 @@ export function SubjectTopicsTab({
                       </div>
                     )}
 
-                    {/* Reorder and Edit */}
+                    {/* Edit & Delete */}
                     <div className="flex items-center gap-1 text-neutral-500">
-                      <button
-                        onClick={() => handleMove(topicTree, pIndex, "UP")}
-                        disabled={pIndex === 0}
-                        className="p-1 hover:text-neutral-200 disabled:opacity-30"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleMove(topicTree, pIndex, "DOWN")}
-                        disabled={pIndex === topicTree.length - 1}
-                        className="p-1 hover:text-neutral-200 disabled:opacity-30"
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
                       <button
                         onClick={() => {
                           setEditingTopic(parent);
@@ -571,23 +654,68 @@ export function SubjectTopicsTab({
                   </div>
                 </div>
 
-                {/* Subtopics Children List */}
+                {/* Subtopics Children List (Interactive Drag & Drop) */}
                 {hasSubtopics && isExpanded && (
                   <div className="divide-y divide-neutral-900 bg-neutral-950/90 pl-6 sm:pl-8 pr-3 py-1 border-t border-neutral-850/60">
                     {parent.subtopics.map((sub, sIndex) => {
                       const isSubCompleted =
                         sub.status === "COMPLETED" || sub.masteryLevel === 4;
 
+                      const isDraggingSub =
+                        draggedSubId?.parentId === parent.id && draggedSubId.id === sub.id;
+                      const isDragOverSub = dragOverSubId === sub.id;
+
                       return (
                         <div
                           key={sub.id}
-                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2.5 pr-1 transition-colors hover:bg-neutral-900/30 rounded"
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            setDraggedSubId({ parentId: parent.id, id: sub.id });
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.dataTransfer.dropEffect = "move";
+                            if (dragOverSubId !== sub.id) {
+                              setDragOverSubId(sub.id);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            e.stopPropagation();
+                            if (dragOverSubId === sub.id) {
+                              setDragOverSubId(null);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (draggedSubId && draggedSubId.parentId === parent.id) {
+                              handleDropSubtopic(parent.id, draggedSubId.id, sub.id);
+                            }
+                          }}
+                          onDragEnd={(e) => {
+                            e.stopPropagation();
+                            setDraggedSubId(null);
+                            setDragOverSubId(null);
+                          }}
+                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 pr-1 transition-all rounded ${
+                            isDraggingSub
+                              ? "opacity-30 border border-dashed border-purple-500 bg-purple-950/20"
+                              : isDragOverSub
+                              ? "border-t-2 border-purple-500 bg-purple-950/20"
+                              : "hover:bg-neutral-900/40"
+                          }`}
                         >
-                          {/* Subtopic Title and Checkbox */}
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-neutral-600 text-xs font-mono select-none">
-                              ↳
-                            </span>
+                          {/* Subtopic Title, Grip and Checkbox */}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className="cursor-grab active:cursor-grabbing p-0.5 text-neutral-600 hover:text-neutral-300 shrink-0"
+                              title="Arrastar subtópico"
+                            >
+                              <GripVertical className="h-3.5 w-3.5" />
+                            </div>
 
                             <button
                               onClick={() => handleToggleComplete(sub as any)}
@@ -645,26 +773,8 @@ export function SubjectTopicsTab({
                               })}
                             </div>
 
-                            {/* Subtopic Actions */}
+                            {/* Subtopic Edit & Delete */}
                             <div className="flex items-center gap-1 text-neutral-500">
-                              <button
-                                onClick={() =>
-                                  handleMove(parent.subtopics as any, sIndex, "UP")
-                                }
-                                disabled={sIndex === 0}
-                                className="p-1 hover:text-neutral-200 disabled:opacity-30"
-                              >
-                                <ChevronUp className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleMove(parent.subtopics as any, sIndex, "DOWN")
-                                }
-                                disabled={sIndex === parent.subtopics.length - 1}
-                                className="p-1 hover:text-neutral-200 disabled:opacity-30"
-                              >
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
                               <button
                                 onClick={() => {
                                   setEditingTopic(sub as any);

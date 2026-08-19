@@ -1,12 +1,13 @@
 import { db } from "@/db";
 import { topics, assessments, subjects } from "@/db/schema";
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, and, isNull } from "drizzle-orm";
 import {
   calculateTopicProgress,
   calculateMasteryAverage,
   calculateMasteryDistribution,
   calculateEstimatedRemainingStudyHours,
   buildTopicTree,
+  compareTopicsNatural,
 } from "@/domain/topics";
 
 export async function getTopicsBySubjectId(subjectId: string) {
@@ -70,14 +71,41 @@ export async function createTopic(data: {
   let orderIndex = data.orderIndex;
 
   if (orderIndex === undefined || orderIndex === 0) {
-    const existing = await db
-      .select({ orderIndex: topics.orderIndex })
+    // Query sibling topics to calculate natural insertion order
+    const siblings = await db
+      .select({ id: topics.id, title: topics.title, orderIndex: topics.orderIndex })
       .from(topics)
-      .where(eq(topics.subjectId, data.subjectId))
-      .orderBy(desc(topics.orderIndex))
-      .limit(1);
+      .where(
+        data.parentId
+          ? and(eq(topics.subjectId, data.subjectId), eq(topics.parentId, data.parentId))
+          : and(eq(topics.subjectId, data.subjectId), isNull(topics.parentId))
+      );
 
-    orderIndex = existing.length > 0 ? existing[0].orderIndex + 1 : 1;
+    if (siblings.length === 0) {
+      orderIndex = 1;
+    } else {
+      // Natural sort comparing titles
+      const allSiblings = [
+        ...siblings,
+        { id: "temp-new-item", title: data.title.trim(), orderIndex: 999999 },
+      ].sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" })
+      );
+
+      const targetPos = allSiblings.findIndex((s) => s.id === "temp-new-item");
+      orderIndex = targetPos + 1;
+
+      // Re-index siblings to maintain clean sequential order without collisions
+      for (let i = 0; i < allSiblings.length; i++) {
+        const item = allSiblings[i];
+        if (item.id !== "temp-new-item" && item.orderIndex !== i + 1) {
+          await db
+            .update(topics)
+            .set({ orderIndex: i + 1, updatedAt: new Date() })
+            .where(eq(topics.id, item.id));
+        }
+      }
+    }
   }
 
   const isCompleted = data.status === "COMPLETED" || data.masteryLevel === 4;
@@ -123,28 +151,29 @@ export async function batchCreateTopics(
     .orderBy(desc(topics.orderIndex))
     .limit(1);
 
-  let startOrder = existing.length > 0 ? existing[0].orderIndex + 1 : 1;
+  let startIndex = existing.length > 0 ? existing[0].orderIndex + 1 : 1;
 
-  const topicsToInsert = lines.map((line, index) => {
-    // Strip leading numbers/bullets like "1. ", "- ", "1) "
-    const cleanedTitle = line.replace(/^(\d+[\.\)]|\-|\*)\s+/, "");
+  const inserted = [];
+  for (const line of lines) {
+    const [t] = await db
+      .insert(topics)
+      .values({
+        subjectId,
+        parentId: parentId || null,
+        title: line,
+        orderIndex: startIndex++,
+        masteryLevel: 0,
+        importance: 3,
+        status: "NOT_STARTED",
+        assessmentId: assessmentId || null,
+        updatedAt: new Date(),
+      })
+      .returning();
 
-    return {
-      subjectId,
-      parentId: parentId || null,
-      title: cleanedTitle,
-      orderIndex: startOrder + index,
-      masteryLevel: 0,
-      importance: 3,
-      status: "NOT_STARTED" as const,
-      assessmentId: assessmentId || null,
-      updatedAt: new Date(),
-    };
-  });
+    inserted.push(t);
+  }
 
-  await db.insert(topics).values(topicsToInsert);
-
-  return { count: topicsToInsert.length };
+  return { count: inserted.length, topics: inserted };
 }
 
 export async function updateTopic(
@@ -161,14 +190,10 @@ export async function updateTopic(
     assessmentId: string | null;
   }>
 ) {
-  const isCompleted =
-    data.status === "COMPLETED" || (data.masteryLevel !== undefined && data.masteryLevel === 4);
-
   const [updated] = await db
     .update(topics)
     .set({
       ...data,
-      completedAt: isCompleted ? new Date() : data.status === "NOT_STARTED" ? null : undefined,
       updatedAt: new Date(),
     })
     .where(eq(topics.id, id))
@@ -180,7 +205,7 @@ export async function updateTopic(
 export async function updateTopicMastery(id: string, masteryLevel: number) {
   const clamped = Math.max(0, Math.min(4, masteryLevel));
 
-  let status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" = "IN_PROGRESS";
+  let status: "NOT_STARTED" | "IN_PROGRESS" | "REVIEWED" | "COMPLETED" = "IN_PROGRESS";
   let completedAt: Date | null = null;
 
   if (clamped === 4) {

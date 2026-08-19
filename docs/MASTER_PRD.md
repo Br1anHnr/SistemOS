@@ -120,10 +120,11 @@ Entidades principais previstas:
 - [x] **Etapa 1:** Estruturação inicial do repositório e elaboração do esqueleto do MASTER_PRD.
 - [x] **Etapa 2:** Definição da arquitetura técnica e stack tecnológica.
 - [x] **Etapa 3:** Inicialização do projeto Next.js (TypeScript, Tailwind CSS, shadcn/ui, Drizzle ORM, Zod, Vitest) e estrutura de pastas modular.
-- [x] **Etapa 4:** Modelagem de dados detalhada no Drizzle (schemas e migrations) e formalização das regras de negócio.
+- [x] **Etapa 4:** Modelagem de dados no Drizzle (schemas e migrations) e formalização das regras.
 - [x] **Etapa 5:** Implementação dos serviços de domínio (cálculo de médias, faltas, risco e recomendação) com testes unitários no Vitest.
-- [ ] **Etapa 6:** Construção das interfaces e componentes UI com shadcn/ui.
+- [x] **Etapa 6:** Construção das interfaces e componentes UI com shadcn/ui.
 - [ ] **Etapa 7:** Integração ponta a ponta e preparação para deploy (Vercel ou Coolify).
+
 
 ---
 

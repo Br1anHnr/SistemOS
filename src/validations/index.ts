@@ -2,162 +2,169 @@ import { z } from "zod";
 
 // ─── Semester ───────────────────────────────────────────────────────────────
 
-export const semesterStatusSchema = z.enum([
-  "PLANNED",
-  "ACTIVE",
-  "COMPLETED",
-  "ARCHIVED",
-]);
+export const semesterStatusSchema = z.enum(
+  ["PLANNED", "ACTIVE", "COMPLETED", "ARCHIVED"],
+  {
+    errorMap: () => ({ message: "Selecione um status válido para o semestre." }),
+  }
+);
 
 export const createSemesterSchema = z
   .object({
-    name: z.string().min(1).max(100),
-    academicYear: z.string().min(1).max(10),
-    academicTerm: z.string().min(1).max(20),
-    startDate: z.string().date(),
-    endDate: z.string().date(),
-    status: semesterStatusSchema.optional().default("PLANNED"),
+    name: z
+      .string({ required_error: "Informe o nome do semestre." })
+      .min(1, "Informe o nome do semestre.")
+      .max(100, "O nome do semestre deve ter no máximo 100 caracteres."),
+    academicYear: z
+      .string({ required_error: "Informe o ano acadêmico." })
+      .min(1, "Informe o ano acadêmico (ex: 2026).")
+      .max(10, "Ano acadêmico inválido."),
+    academicTerm: z
+      .string({ required_error: "Informe o período letivo." })
+      .min(1, "Informe o período letivo (ex: 1º Semestre).")
+      .max(20, "Período inválido."),
+    startDate: z
+      .string({ required_error: "Informe a data de início." })
+      .min(1, "Informe a data de início."),
+    endDate: z
+      .string({ required_error: "Informe a data de término." })
+      .min(1, "Informe a data de término."),
+    status: semesterStatusSchema.default("PLANNED"),
   })
   .refine((data) => data.endDate > data.startDate, {
-    message: "endDate must be after startDate",
+    message: "A data final deve ser posterior à data inicial.",
     path: ["endDate"],
   });
 
+export const updateSemesterSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, "Informe o nome do semestre.")
+      .max(100, "O nome do semestre deve ter no máximo 100 caracteres.")
+      .optional(),
+    academicYear: z.string().min(1, "Informe o ano acadêmico.").max(10).optional(),
+    academicTerm: z.string().min(1, "Informe o período letivo.").max(20).optional(),
+    startDate: z.string().min(1, "Informe a data de início.").optional(),
+    endDate: z.string().min(1, "Informe a data de término.").optional(),
+    status: semesterStatusSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate) {
+        return data.endDate > data.startDate;
+      }
+      return true;
+    },
+    {
+      message: "A data final deve ser posterior à data inicial.",
+      path: ["endDate"],
+    }
+  );
+
 // ─── Subject ────────────────────────────────────────────────────────────────
 
-export const subjectStatusSchema = z.enum([
-  "ACTIVE",
-  "COMPLETED",
-  "FAILED",
-  "DROPPED",
-  "ARCHIVED",
-]);
+export const subjectStatusSchema = z.enum(
+  ["ACTIVE", "COMPLETED", "FAILED", "DROPPED", "ARCHIVED"],
+  {
+    errorMap: () => ({ message: "Selecione um status válido para a disciplina." }),
+  }
+);
 
 export const createSubjectSchema = z.object({
-  semesterId: z.string().uuid(),
-  name: z.string().min(1).max(200),
-  code: z.string().max(30).optional(),
-  professor: z.string().max(200).optional(),
-  room: z.string().max(50).optional(),
-  workloadHours: z.number().int().positive().optional(),
-  minimumAttendancePercentage: z.number().min(0).max(100).optional().default(75),
-  personalDifficulty: z.number().int().min(1).max(5).optional().default(3),
-  color: z.string().max(9).optional(),
-  status: subjectStatusSchema.optional().default("ACTIVE"),
+  semesterId: z.string({ required_error: "Semestre é obrigatório." }).uuid("ID de semestre inválido."),
+  name: z
+    .string({ required_error: "Informe o nome da disciplina." })
+    .min(1, "Informe o nome da disciplina.")
+    .max(200, "O nome da disciplina deve ter no máximo 200 caracteres."),
+  code: z.string().max(30, "Código deve ter no máximo 30 caracteres.").optional().or(z.literal("")),
+  professor: z.string().max(200, "Nome do professor deve ter no máximo 200 caracteres.").optional().or(z.literal("")),
+  room: z.string().max(50, "Sala deve ter no máximo 50 caracteres.").optional().or(z.literal("")),
+  workloadHours: z
+    .number({ invalid_type_error: "Carga horária deve ser um número." })
+    .int("Carga horária deve ser um número inteiro.")
+    .positive("Carga horária deve ser maior que zero.")
+    .optional()
+    .nullable(),
+  minimumAttendancePercentage: z
+    .number({ invalid_type_error: "Frequência mínima deve ser um número." })
+    .min(0, "A frequência mínima não pode ser menor que 0%.")
+    .max(100, "A frequência mínima não pode ser maior que 100%.")
+    .default(75),
+  personalDifficulty: z
+    .number({ invalid_type_error: "Dificuldade deve ser um número." })
+    .int()
+    .min(1, "Dificuldade mínima é 1.")
+    .max(5, "Dificuldade máxima é 5.")
+    .default(3),
+  color: z.string().max(9).optional().or(z.literal("")),
+  status: subjectStatusSchema.default("ACTIVE"),
+});
+
+export const updateSubjectSchema = createSubjectSchema.partial().extend({
+  id: z.string().uuid().optional(),
 });
 
 // ─── SubjectSchedule ────────────────────────────────────────────────────────
 
-export const createSubjectScheduleSchema = z.object({
-  subjectId: z.string().uuid(),
-  dayOfWeek: z.number().int().min(0).max(6),
-  startTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format (HH:MM or HH:MM:SS)"),
-  endTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format (HH:MM or HH:MM:SS)"),
-  room: z.string().max(50).optional(),
-});
+export const createSubjectScheduleSchema = z
+  .object({
+    subjectId: z.string().uuid("ID de disciplina inválido."),
+    dayOfWeek: z
+      .number({ required_error: "Selecione o dia da semana." })
+      .int()
+      .min(0, "Dia da semana inválido.")
+      .max(6, "Dia da semana inválido."),
+    startTime: z
+      .string({ required_error: "Informe o horário inicial." })
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Horário inicial inválido (use HH:MM)."),
+    endTime: z
+      .string({ required_error: "Informe o horário final." })
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Horário final inválido (use HH:MM)."),
+    room: z.string().max(50, "Sala deve ter no máximo 50 caracteres.").optional().or(z.literal("")),
+  })
+  .refine((data) => data.endTime > data.startTime, {
+    message: "O horário final deve ser posterior ao horário inicial.",
+    path: ["endTime"],
+  });
 
-// ─── GradingScheme ──────────────────────────────────────────────────────────
+// ─── GradingScheme & Components ─────────────────────────────────────────────
 
-export const roundingModeSchema = z.enum([
-  "ROUND_HALF_UP",
-  "ROUND_DOWN",
-  "ROUND_UP",
-  "NONE",
-]);
+export const roundingModeSchema = z.enum(
+  ["ROUND_HALF_UP", "ROUND_DOWN", "ROUND_UP", "NONE"],
+  {
+    errorMap: () => ({ message: "Modo de arredondamento inválido." }),
+  }
+);
 
-export const createGradingSchemeSchema = z.object({
-  subjectId: z.string().uuid(),
-  passingGrade: z.number().min(0).optional().default(5),
-  examEnabled: z.boolean().optional().default(true),
-  examTriggerThreshold: z.number().min(0).optional().default(5),
-  roundingMode: roundingModeSchema.optional().default("ROUND_HALF_UP"),
-  decimalPlaces: z.number().int().min(0).max(4).optional().default(2),
-});
-
-// ─── GradeComponent ────────────────────────────────────────────────────────
-
-export const createGradeComponentSchema = z.object({
-  gradingSchemeId: z.string().uuid(),
-  name: z.string().min(1).max(50),
-  code: z.string().min(1).max(10),
-  weight: z.number().positive().optional().default(1),
-  maxGrade: z.number().positive().optional().default(10),
-  orderIndex: z.number().int().min(0).optional().default(0),
-  isExam: z.boolean().optional().default(false),
-});
-
-// ─── Assessment ─────────────────────────────────────────────────────────────
-
-export const assessmentTypeSchema = z.enum([
-  "EXAM",
-  "FINAL_EXAM",
-  "ASSIGNMENT",
-  "OTHER",
-]);
-
-export const assessmentStatusSchema = z.enum([
-  "SCHEDULED",
-  "COMPLETED",
-  "CANCELED",
-]);
-
-export const createAssessmentSchema = z.object({
-  subjectId: z.string().uuid(),
-  gradeComponentId: z.string().uuid().optional(),
-  title: z.string().min(1).max(200),
-  type: assessmentTypeSchema,
-  date: z.string().date().optional(),
-  maxGrade: z.number().positive().optional().default(10),
-  status: assessmentStatusSchema.optional().default("SCHEDULED"),
-  notes: z.string().optional(),
-});
-
-// ─── AssessmentResult ───────────────────────────────────────────────────────
-
-export const createAssessmentResultSchema = z.object({
-  assessmentId: z.string().uuid(),
-  grade: z.number().min(0),
-  gradedAt: z.string().datetime().optional(),
-  notes: z.string().optional(),
-});
-
-// ─── ClassSession ───────────────────────────────────────────────────────────
-
-export const classSessionStatusSchema = z.enum([
-  "SCHEDULED",
-  "HELD",
-  "CANCELED",
-]);
-
-export const createClassSessionSchema = z.object({
-  subjectId: z.string().uuid(),
-  scheduleId: z.string().uuid().optional(),
-  date: z.string().date(),
-  startTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
-    .optional(),
-  endTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
-    .optional(),
-  absenceUnits: z.number().int().positive().optional().default(1),
-  status: classSessionStatusSchema.optional().default("SCHEDULED"),
-});
-
-// ─── Attendance ─────────────────────────────────────────────────────────────
-
-export const attendanceStatusSchema = z.enum([
-  "PRESENT",
-  "ABSENT",
-  "PARTIAL",
-  "EXCUSED",
-  "NOT_RECORDED",
-]);
-
-export const createAttendanceSchema = z.object({
-  classSessionId: z.string().uuid(),
-  status: attendanceStatusSchema,
-  absentUnits: z.number().int().min(0).optional().default(0),
-  notes: z.string().optional(),
+export const updateGradingSchemeWithComponentsSchema = z.object({
+  schemeId: z.string().uuid(),
+  passingGrade: z
+    .number({ required_error: "Informe a nota mínima para aprovação." })
+    .min(0, "A média mínima não pode ser negativa.")
+    .max(10, "A média mínima não pode exceder 10."),
+  examEnabled: z.boolean().default(true),
+  examTriggerThreshold: z
+    .number({ required_error: "Informe o limite para exame." })
+    .min(0, "O limite para exame não pode ser negativo.")
+    .max(10, "O limite não pode exceder 10."),
+  decimalPlaces: z.number().int().min(0).max(4).default(2),
+  components: z
+    .array(
+      z.object({
+        id: z.string().uuid().optional(),
+        name: z.string().min(1, "Informe o nome da avaliação."),
+        code: z.string().min(1, "Informe o código da avaliação (ex: P1)."),
+        weight: z
+          .number({ required_error: "Informe o peso." })
+          .positive("O peso deve ser maior que zero."),
+        maxGrade: z
+          .number({ required_error: "Informe a nota máxima." })
+          .positive("A nota máxima deve ser maior que zero.")
+          .default(10),
+        orderIndex: z.number().int().default(0),
+        isExam: z.boolean().default(false),
+      })
+    )
+    .min(1, "Adicione pelo menos um componente de avaliação."),
 });

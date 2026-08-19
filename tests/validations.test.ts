@@ -1,0 +1,160 @@
+import { describe, expect, it } from "vitest";
+import {
+  createSemesterSchema,
+  createSubjectSchema,
+  createSubjectScheduleSchema,
+  updateGradingSchemeWithComponentsSchema,
+} from "@/validations";
+
+describe("Zod Validations for Academic Entities", () => {
+  describe("createSemesterSchema", () => {
+    it("should accept valid semester data", () => {
+      const valid = {
+        name: "2026.1",
+        academicYear: "2026",
+        academicTerm: "1º Semestre",
+        startDate: "2026-02-01",
+        endDate: "2026-06-30",
+        status: "ACTIVE" as const,
+      };
+
+      const result = createSemesterSchema.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it("should fail when endDate is before or equal to startDate", () => {
+      const invalid = {
+        name: "2026.1",
+        academicYear: "2026",
+        academicTerm: "1º Semestre",
+        startDate: "2026-06-30",
+        endDate: "2026-02-01",
+      };
+
+      const result = createSemesterSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe(
+          "A data final deve ser posterior à data inicial."
+        );
+      }
+    });
+
+    it("should fail when name is empty", () => {
+      const invalid = {
+        name: "",
+        academicYear: "2026",
+        academicTerm: "1º Semestre",
+        startDate: "2026-02-01",
+        endDate: "2026-06-30",
+      };
+
+      const result = createSemesterSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("createSubjectSchema", () => {
+    it("should accept valid subject data", () => {
+      const valid = {
+        semesterId: "123e4567-e89b-12d3-a456-426614174000",
+        name: "Cálculo I",
+        code: "MAT01",
+        professor: "Prof. Silva",
+        minimumAttendancePercentage: 75,
+        personalDifficulty: 4,
+      };
+
+      const result = createSubjectSchema.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it("should fail when minimum attendance is out of bounds", () => {
+      const invalid = {
+        semesterId: "123e4567-e89b-12d3-a456-426614174000",
+        name: "Cálculo I",
+        minimumAttendancePercentage: 110,
+      };
+
+      const result = createSubjectSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it("should fail when personal difficulty is greater than 5", () => {
+      const invalid = {
+        semesterId: "123e4567-e89b-12d3-a456-426614174000",
+        name: "Cálculo I",
+        personalDifficulty: 6,
+      };
+
+      const result = createSubjectSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("createSubjectScheduleSchema", () => {
+    it("should accept valid schedule", () => {
+      const valid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        dayOfWeek: 2,
+        startTime: "19:00",
+        endTime: "20:40",
+      };
+
+      const result = createSubjectScheduleSchema.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it("should fail when endTime is before startTime", () => {
+      const invalid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        dayOfWeek: 2,
+        startTime: "20:40",
+        endTime: "19:00",
+      };
+
+      const result = createSubjectScheduleSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe(
+          "O horário final deve ser posterior ao horário inicial."
+        );
+      }
+    });
+  });
+
+  describe("updateGradingSchemeWithComponentsSchema", () => {
+    it("should accept valid grading scheme with components", () => {
+      const valid = {
+        schemeId: "123e4567-e89b-12d3-a456-426614174000",
+        passingGrade: 5,
+        examEnabled: true,
+        examTriggerThreshold: 5,
+        decimalPlaces: 2,
+        components: [
+          { name: "Prova 1", code: "P1", weight: 4, maxGrade: 10 },
+          { name: "Prova 2", code: "P2", weight: 6, maxGrade: 10 },
+        ],
+      };
+
+      const result = updateGradingSchemeWithComponentsSchema.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject negative or zero weights", () => {
+      const invalid = {
+        schemeId: "123e4567-e89b-12d3-a456-426614174000",
+        passingGrade: 5,
+        examEnabled: true,
+        examTriggerThreshold: 5,
+        decimalPlaces: 2,
+        components: [
+          { name: "Prova 1", code: "P1", weight: 0, maxGrade: 10 },
+        ],
+      };
+
+      const result = updateGradingSchemeWithComponentsSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+  });
+});

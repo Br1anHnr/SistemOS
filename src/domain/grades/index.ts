@@ -1,3 +1,8 @@
+export {
+  formatGradingFormula,
+  type FormulaComponent,
+} from "./formula";
+
 /**
  * Grades Domain Service
  *
@@ -6,6 +11,7 @@
  *
  * These functions are fully decoupled from React, database, and UI concerns.
  */
+
 
 export interface GradeEntry {
   /** Grade obtained (0 to maxGrade) */

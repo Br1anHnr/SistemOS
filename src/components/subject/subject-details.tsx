@@ -31,6 +31,10 @@ import {
   SubjectAttendanceTab,
   ClassSessionWithAttendance,
 } from "@/components/subject/subject-attendance-tab";
+import {
+  SubjectTopicsTab,
+  TopicWithAssessment,
+} from "@/components/subject/subject-topics-tab";
 import { SubjectModal } from "@/components/subject/subject-modal";
 import { deleteSubjectAction } from "@/actions/subject.actions";
 import { useToast } from "@/components/ui/toast";
@@ -53,6 +57,7 @@ export interface SubjectDetailsData {
   gradingScheme: GradingSchemeItem | null;
   assessments?: AssessmentItem[];
   classSessions?: ClassSessionWithAttendance[];
+  topics?: TopicWithAssessment[];
 }
 
 export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
@@ -64,7 +69,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
   const handleDelete = async () => {
     if (
       !confirm(
-        `Tem certeza que deseja excluir a disciplina "${subject.name}"? Todos os horários, notas e faltas também serão removidos.`
+        `Tem certeza que deseja excluir a disciplina "${subject.name}"? Todos os horários, notas, faltas e conteúdos também serão removidos.`
       )
     ) {
       return;
@@ -85,6 +90,13 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
       setDeleting(false);
     }
   };
+
+  const assessmentOptions = React.useMemo(() => {
+    return (subject.assessments || []).map((a) => ({
+      id: a.id,
+      title: a.title,
+    }));
+  }, [subject.assessments]);
 
   return (
     <div className="space-y-6">
@@ -166,7 +178,7 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
           </TabsTrigger>
           <TabsTrigger value="topics">
             <FileText className="h-3.5 w-3.5 mr-1.5" />
-            Conteúdos
+            Conteúdos ({subject.topics?.length || 0})
           </TabsTrigger>
         </TabsList>
 
@@ -277,13 +289,11 @@ export function SubjectDetails({ subject }: { subject: SubjectDetailsData }) {
 
         {/* Topics Tab */}
         <TabsContent value="topics">
-          <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-2">
-            <FileText className="h-8 w-8 text-neutral-500 mx-auto" />
-            <h4 className="text-sm font-semibold text-neutral-200">Conteúdos & Ementa</h4>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-              O acompanhamento de tópicos lecionados e pendências de estudo estará disponível na próxima etapa.
-            </p>
-          </div>
+          <SubjectTopicsTab
+            subjectId={subject.id}
+            topics={subject.topics || []}
+            assessments={assessmentOptions}
+          />
         </TabsContent>
       </Tabs>
 

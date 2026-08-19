@@ -8,6 +8,8 @@ import {
   saveGradeSchema,
   createClassSessionSchema,
   recordAttendanceSchema,
+  createTopicSchema,
+  updateTopicMasterySchema,
 } from "@/validations";
 
 describe("Zod Validations for Academic Entities", () => {
@@ -218,6 +220,36 @@ describe("Zod Validations for Academic Entities", () => {
         absentUnits: -1,
       };
       expect(recordAttendanceSchema.safeParse(invalidUnits).success).toBe(false);
+    });
+  });
+
+  describe("createTopicSchema & updateTopicMasterySchema", () => {
+    it("should validate topic creation data", () => {
+      const valid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        title: "Regra da Cadeia",
+        masteryLevel: 2,
+        importance: 4,
+        estimatedHours: 3.5,
+      };
+      expect(createTopicSchema.safeParse(valid).success).toBe(true);
+    });
+
+    it("should reject mastery level out of range 0-4", () => {
+      const invalid = {
+        subjectId: "123e4567-e89b-12d3-a456-426614174000",
+        title: "Regra da Cadeia",
+        masteryLevel: 5,
+      };
+      expect(createTopicSchema.safeParse(invalid).success).toBe(false);
+    });
+
+    it("should validate updateTopicMasterySchema", () => {
+      const valid = {
+        topicId: "123e4567-e89b-12d3-a456-426614174000",
+        masteryLevel: 4,
+      };
+      expect(updateTopicMasterySchema.safeParse(valid).success).toBe(true);
     });
   });
 });

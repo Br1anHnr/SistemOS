@@ -196,7 +196,7 @@ export const createAssessmentSchema = z.object({
   date: z.string().optional().nullable(),
   maxGrade: z
     .number({ invalid_type_error: "Nota máxima deve ser um número." })
-    .min(0.1, "Nota máxima deve ser maior que zero.")
+    .min(0, "Nota máxima não pode ser negativa.")
     .max(100, "Nota máxima inválida.")
     .default(10),
   status: assessmentStatusSchema.default("SCHEDULED"),
@@ -259,4 +259,61 @@ export const recordAttendanceSchema = z.object({
     .min(0, "Unidades de falta não podem ser negativas.")
     .default(0),
   notes: z.string().optional().nullable(),
+});
+
+// ─── Topic / Conteúdo ───────────────────────────────────────────────────────
+
+export const topicStatusSchema = z.enum(
+  ["NOT_STARTED", "IN_PROGRESS", "REVIEWED", "COMPLETED", "ARCHIVED"],
+  {
+    errorMap: () => ({ message: "Status de conteúdo inválido." }),
+  }
+);
+
+export const createTopicSchema = z.object({
+  subjectId: z.string({ required_error: "Disciplina é obrigatória." }).uuid("ID de disciplina inválido."),
+  title: z
+    .string({ required_error: "Informe o título do conteúdo." })
+    .min(1, "Informe o título do conteúdo.")
+    .max(250, "O título deve ter no máximo 250 caracteres."),
+  description: z.string().optional().nullable(),
+  orderIndex: z.number().int().default(0),
+  masteryLevel: z
+    .number({ invalid_type_error: "Nível de domínio deve ser um número." })
+    .int()
+    .min(0, "Domínio mínimo é 0.")
+    .max(4, "Domínio máximo é 4.")
+    .default(0),
+  importance: z
+    .number({ invalid_type_error: "Importância deve ser um número." })
+    .int()
+    .min(1, "Importância mínima é 1.")
+    .max(5, "Importância máxima é 5.")
+    .default(3),
+  estimatedHours: z
+    .number({ invalid_type_error: "Horas estimadas deve ser um número." })
+    .min(0, "Horas não podem ser negativas.")
+    .optional()
+    .nullable(),
+  status: topicStatusSchema.default("NOT_STARTED"),
+  assessmentId: z.string().uuid("ID de avaliação inválido.").optional().nullable(),
+});
+
+export const updateTopicSchema = createTopicSchema.partial();
+
+export const updateTopicMasterySchema = z.object({
+  topicId: z.string().uuid("ID de conteúdo inválido."),
+  masteryLevel: z
+    .number({ required_error: "Informe o nível de domínio." })
+    .int()
+    .min(0, "Nível mínimo é 0.")
+    .max(4, "Nível máximo é 4."),
+});
+
+export const batchCreateTopicsSchema = z.object({
+  subjectId: z.string().uuid("ID de disciplina inválido."),
+  rawText: z
+    .string({ required_error: "Insira a lista de tópicos." })
+    .min(1, "Insira pelo menos um tópico."),
+  assessmentId: z.string().uuid().optional().nullable(),
 });

@@ -18,3 +18,4 @@ export {
   classSessionStatusEnum,
   attendanceStatusEnum,
 } from "./attendance";
+export { topics, topicStatusEnum } from "./topic";

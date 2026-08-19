@@ -143,3 +143,4 @@ Entidades principais previstas:
 | 2026-08-19 | Frequência baseada em unidades de ausência | `absenceUnits` por sessão permite representar aulas duplas/triplas. Aulas canceladas excluídas do cálculo. Percentual mínimo configurável (default 75%). |
 | 2026-08-19 | Valores derivados não são persistidos no banco | `currentAverage`, `attendancePercentage`, `remainingAbsences` e `riskScore` são sempre calculados em tempo de leitura pelos serviços de domínio. |
 | 2026-08-19 | Fórmula pós-exame não definida | Exame modelado e detectável (`EXAM_REQUIRED`), mas cálculo final pós-exame aguarda definição das regras institucionais. |
+| 2026-08-19 | Níveis de domínio de tópicos (0 a 4) | Escala de domínio da ementa (0: Não Iniciado, 1: Básico, 2: Razoável, 3: Bom, 4: Dominado) com vínculo opcional a avaliações e horas estimadas de estudo. |

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSubjectById } from "@/services/subject.service";
 import { getAssessmentsBySubjectId } from "@/services/assessment.service";
 import { getClassSessionsWithAttendanceBySubjectId } from "@/services/attendance.service";
+import { getTopicsBySubjectId } from "@/services/topic.service";
 import { SubjectDetails } from "@/components/subject/subject-details";
 
 export const dynamic = "force-dynamic";
@@ -18,15 +19,17 @@ export default async function SubjectPage({
     notFound();
   }
 
-  const [assessments, classSessions] = await Promise.all([
+  const [assessments, classSessions, topics] = await Promise.all([
     getAssessmentsBySubjectId(id),
     getClassSessionsWithAttendanceBySubjectId(id),
+    getTopicsBySubjectId(id),
   ]);
 
   const fullSubject = {
     ...subject,
     assessments,
     classSessions,
+    topics,
   };
 
   return <SubjectDetails subject={fullSubject as any} />;

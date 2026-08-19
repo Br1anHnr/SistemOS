@@ -366,3 +366,69 @@ export const createMaterialSchema = z.object({
   fileSize: z.number().int().optional().nullable(),
   pageCount: z.number().int().optional().nullable(),
 });
+
+// ─── Topic Study Notes ───────────────────────────────────────────────────────
+
+export const topicNoteTypeSchema = z.enum(
+  ["NOTE", "IMPORTANT", "QUESTION", "FORMULA"],
+  {
+    errorMap: () => ({ message: "Tipo de anotação inválido." }),
+  }
+);
+
+export const createTopicNoteSchema = z.object({
+  topicId: z
+    .string({ required_error: "Tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  type: topicNoteTypeSchema.default("NOTE"),
+  content: z
+    .string({ required_error: "O conteúdo da nota é obrigatório." })
+    .min(1, "O conteúdo da nota não pode ser vazio."),
+  pageNumber: z
+    .number({ invalid_type_error: "Número da página deve ser um número inteiro." })
+    .int("Número da página deve ser um inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1.")
+    .optional()
+    .nullable(),
+});
+
+export const updateTopicNoteSchema = z.object({
+  type: topicNoteTypeSchema.optional(),
+  content: z.string().min(1, "O conteúdo não pode ser vazio.").optional(),
+  pageNumber: z.number().int().min(1).optional().nullable(),
+});
+
+// ─── Material Bookmarks ──────────────────────────────────────────────────────
+
+export const materialBookmarkTypeSchema = z.enum(
+  ["BOOKMARK", "IMPORTANT", "EXAM", "QUESTION"],
+  {
+    errorMap: () => ({ message: "Tipo de marcador inválido." }),
+  }
+);
+
+export const createMaterialBookmarkSchema = z.object({
+  topicId: z
+    .string({ required_error: "Tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z
+    .string({ required_error: "Material é obrigatório." })
+    .uuid("ID de material inválido."),
+  pageNumber: z
+    .number({ required_error: "O número da página é obrigatório." })
+    .int("Número da página deve ser um número inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1."),
+  title: z
+    .string({ required_error: "O título do marcador é obrigatório." })
+    .min(1, "O título do marcador não pode ser vazio.")
+    .max(200, "O título deve ter no máximo 200 caracteres."),
+  type: materialBookmarkTypeSchema.default("BOOKMARK"),
+});
+
+export const updateMaterialBookmarkSchema = z.object({
+  pageNumber: z.number().int().min(1).optional(),
+  title: z.string().min(1).max(200).optional(),
+  type: materialBookmarkTypeSchema.optional(),
+});
+

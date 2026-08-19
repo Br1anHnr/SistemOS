@@ -20,3 +20,5 @@ export {
 } from "./attendance";
 export { topics, topicStatusEnum } from "./topic";
 export { subjectMaterials } from "./material";
+export { topicNotes, topicNoteTypeEnum } from "./topic-note";
+export { materialBookmarks, materialBookmarkTypeEnum } from "./material-bookmark";

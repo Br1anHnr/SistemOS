@@ -1,9 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,6 +22,7 @@ import {
 import { TopicModal } from "@/components/topic/topic-modal";
 import { BatchTopicModal } from "@/components/topic/batch-topic-modal";
 import { PdfViewerModal } from "@/components/material/pdf-viewer-modal";
+import { StudyWorkspaceModal } from "@/components/study-workspace/study-workspace-modal";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText,
@@ -40,6 +39,8 @@ import {
   Layers,
   Eye,
   GripVertical,
+  BookOpen,
+  Bookmark,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -57,6 +58,8 @@ export interface TopicWithAssessment extends TopicItem {
   assessmentId?: string | null;
   assessmentTitle?: string | null;
   completedAt?: Date | string | null;
+  notesCount?: number;
+  bookmarksCount?: number;
 }
 
 export interface SubjectMaterialItem {
@@ -96,13 +99,18 @@ export function SubjectTopicsTab({
   const [editingTopic, setEditingTopic] = React.useState<TopicWithAssessment | null>(null);
   const [targetParentId, setTargetParentId] = React.useState<string | null>(null);
 
-  // PDF Viewer state
+  // PDF Viewer state (Lightweight standalone reader)
   const [pdfViewerOpen, setPdfViewerOpen] = React.useState(false);
   const [activeMaterialId, setActiveMaterialId] = React.useState<string | null>(null);
   const [activeTopicId, setActiveTopicId] = React.useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = React.useState<string | null>(null);
   const [activePdfTitle, setActivePdfTitle] = React.useState<string>("");
   const [activePdfFileName, setActivePdfFileName] = React.useState<string>("");
+
+  // Study Workspace state (Integrated PDF + Study Panel)
+  const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
+  const [workspaceTopic, setWorkspaceTopic] = React.useState<TopicWithAssessment | null>(null);
+  const [workspaceMaterial, setWorkspaceMaterial] = React.useState<SubjectMaterialItem | null>(null);
 
   // Accordion expanded state for parent modules
   const [expandedParents, setExpandedParents] = React.useState<Record<string, boolean>>({});
@@ -198,16 +206,13 @@ export function SubjectTopicsTab({
 
     if (sourceIndex === -1 || targetIndex === -1) return;
 
-    // Move item in array
     const [moved] = currentList.splice(sourceIndex, 1);
     currentList.splice(targetIndex, 0, moved);
 
-    // Optimistic UI update
     setTopicTree(currentList);
     setDraggedParentId(null);
     setDragOverParentId(null);
 
-    // Build reordered payload
     const reorderedPayload = currentList.map((item, idx) => ({
       id: item.id,
       orderIndex: idx + 1,
@@ -219,7 +224,7 @@ export function SubjectTopicsTab({
         router.refresh();
       }
     } catch {
-      // Silently fail or keep optimistic
+      // Keep optimistic
     }
   };
 
@@ -249,7 +254,6 @@ export function SubjectTopicsTab({
       subtopics,
     };
 
-    // Optimistic UI update
     setTopicTree(currentList);
     setDraggedSubId(null);
     setDragOverSubId(null);
@@ -265,7 +269,7 @@ export function SubjectTopicsTab({
         router.refresh();
       }
     } catch {
-      // Silently fail or keep optimistic
+      // Keep optimistic
     }
   };
 
@@ -291,6 +295,19 @@ export function SubjectTopicsTab({
     setActivePdfTitle(material.title);
     setActivePdfFileName(material.fileName);
     setPdfViewerOpen(true);
+  };
+
+  const handleOpenStudyWorkspace = (topic: TopicWithAssessment) => {
+    const linked =
+      materialsByTopicId.get(topic.id) ||
+      materials.find(
+        (m) => m.title === topic.title || m.fileName.includes(topic.title)
+      ) ||
+      null;
+
+    setWorkspaceTopic(topic);
+    setWorkspaceMaterial(linked);
+    setWorkspaceOpen(true);
   };
 
   return (
@@ -375,7 +392,7 @@ export function SubjectTopicsTab({
             Aulas & Conteúdos da Disciplina ({topics.length})
           </h3>
           <p className="text-xs text-neutral-400">
-            Arraste os cards para priorizar a ordem de estudos e acesse os PDFs no leitor integrado.
+            Arraste os cards para priorizar a ordem de estudos e entre no modo Estudar para tomar notas por página.
           </p>
         </div>
 
@@ -414,7 +431,7 @@ export function SubjectTopicsTab({
             Nenhuma aula ou conteúdo cadastrado
           </h4>
           <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-            Clique em <strong>Adicionar Aula / PDF</strong> para enviar os slides da matéria (ex: <em>Aula 01</em>, <em>Aula 02</em>) e ler o material diretamente aqui dentro.
+            Clique em <strong>Adicionar Aula / PDF</strong> para enviar os slides da matéria (ex: <em>Aula 01</em>, <em>Aula 02</em>) e estudar com anotações vinculadas às páginas.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <Button
@@ -446,10 +463,11 @@ export function SubjectTopicsTab({
             const isParentCompleted =
               parent.status === "COMPLETED" || parent.masteryLevel === 4;
 
-            // Check if there is an attached material
             const linkedMaterial =
               materialsByTopicId.get(parent.id) ||
-              materials.find((m) => m.title === parent.title || m.fileName.includes(parent.title));
+              materials.find(
+                (m) => m.title === parent.title || m.fileName.includes(parent.title)
+              );
 
             const isDraggingThis = draggedParentId === parent.id;
             const isDragOverThis = dragOverParentId === parent.id;
@@ -504,7 +522,6 @@ export function SubjectTopicsTab({
                 >
                   {/* Left: Drag Handle + Chevron + Checkbox + Title */}
                   <div className="flex items-center gap-2 min-w-0">
-                    {/* Drag Grip Handle */}
                     <div
                       className="cursor-grab active:cursor-grabbing p-1 text-neutral-500 hover:text-neutral-200 transition-colors shrink-0"
                       title="Arrastar para reordenar prioridade"
@@ -548,7 +565,21 @@ export function SubjectTopicsTab({
                           {parent.title}
                         </span>
 
-                        {/* In-App PDF Reader Button */}
+                        {/* ESTUDAR / WORKSPACE BUTTON */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudyWorkspace(parent);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors shadow-sm"
+                          title="Abrir Workspace de Estudo com PDF e notas"
+                        >
+                          <BookOpen className="h-3 w-3" />
+                          Estudar
+                        </button>
+
+                        {/* VER PDF STANDALONE BUTTON */}
                         {linkedMaterial && (
                           <button
                             type="button"
@@ -556,12 +587,28 @@ export function SubjectTopicsTab({
                               e.stopPropagation();
                               handleOpenPdf(linkedMaterial);
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition-colors shadow-sm"
-                            title="Abrir PDF no leitor integrado"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-neutral-750 text-neutral-300 hover:text-white transition-colors"
+                            title="Visualizar PDF direto"
                           >
                             <Eye className="h-3 w-3" />
                             Ver PDF
                           </button>
+                        )}
+
+                        {/* NOTES COUNT BADGE */}
+                        {parent.notesCount !== undefined && parent.notesCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-950/40 text-blue-300 border border-blue-800/60">
+                            <FileText className="h-2.5 w-2.5" />
+                            {parent.notesCount} nota(s)
+                          </span>
+                        )}
+
+                        {/* BOOKMARKS COUNT BADGE */}
+                        {parent.bookmarksCount !== undefined && parent.bookmarksCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950/40 text-emerald-300 border border-emerald-800/60">
+                            <Bookmark className="h-2.5 w-2.5" />
+                            {parent.bookmarksCount} marcador(es)
+                          </span>
                         )}
 
                         {hasSubtopics && (
@@ -594,7 +641,6 @@ export function SubjectTopicsTab({
 
                   {/* Right: Actions and Mastery */}
                   <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 shrink-0">
-                    {/* Add Subtopic Button */}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -610,7 +656,6 @@ export function SubjectTopicsTab({
                       Subtópico
                     </Button>
 
-                    {/* Mastery Level */}
                     {!hasSubtopics && (
                       <div className="flex items-center gap-1">
                         {MASTERY_LEVELS.map((lvl) => {
@@ -633,7 +678,6 @@ export function SubjectTopicsTab({
                       </div>
                     )}
 
-                    {/* Edit & Delete */}
                     <div className="flex items-center gap-1 text-neutral-500">
                       <button
                         onClick={() => {
@@ -656,10 +700,10 @@ export function SubjectTopicsTab({
                   </div>
                 </div>
 
-                {/* Subtopics Children List (Interactive Drag & Drop) */}
+                {/* Subtopics Children List */}
                 {hasSubtopics && isExpanded && (
                   <div className="divide-y divide-neutral-900 bg-neutral-950/90 pl-6 sm:pl-8 pr-3 py-1 border-t border-neutral-850/60">
-                    {parent.subtopics.map((sub, sIndex) => {
+                    {parent.subtopics.map((sub) => {
                       const isSubCompleted =
                         sub.status === "COMPLETED" || sub.masteryLevel === 4;
 
@@ -710,7 +754,6 @@ export function SubjectTopicsTab({
                               : "hover:bg-neutral-900/40"
                           }`}
                         >
-                          {/* Subtopic Title, Grip and Checkbox */}
                           <div className="flex items-center gap-2 min-w-0">
                             <div
                               className="cursor-grab active:cursor-grabbing p-0.5 text-neutral-600 hover:text-neutral-300 shrink-0"
@@ -730,7 +773,7 @@ export function SubjectTopicsTab({
                               )}
                             </button>
 
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
                               <span
                                 className={`text-xs font-medium ${
                                   isSubCompleted
@@ -741,10 +784,20 @@ export function SubjectTopicsTab({
                                 {sub.title}
                               </span>
 
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStudyWorkspace(sub as any)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-950/40 text-purple-300 border border-purple-800/60 hover:bg-purple-900/60"
+                                title="Estudar este subtópico"
+                              >
+                                <BookOpen className="h-2.5 w-2.5" />
+                                Estudar
+                              </button>
+
                               {sub.assessmentTitle && (
                                 <Badge
                                   variant="outline"
-                                  className="ml-2 text-[9px] font-mono text-blue-400 border-blue-800"
+                                  className="text-[9px] font-mono text-blue-400 border-blue-800"
                                 >
                                   {sub.assessmentTitle}
                                 </Badge>
@@ -752,9 +805,7 @@ export function SubjectTopicsTab({
                             </div>
                           </div>
 
-                          {/* Subtopic Mastery & Actions */}
                           <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pl-6 sm:pl-0">
-                            {/* Mastery 0 to 4 */}
                             <div className="flex items-center gap-1">
                               {MASTERY_LEVELS.map((lvl) => {
                                 const isSelected = sub.masteryLevel === lvl.level;
@@ -775,7 +826,6 @@ export function SubjectTopicsTab({
                               })}
                             </div>
 
-                            {/* Subtopic Edit & Delete */}
                             <div className="flex items-center gap-1 text-neutral-500">
                               <button
                                 onClick={() => {
@@ -829,6 +879,7 @@ export function SubjectTopicsTab({
         onSuccess={() => router.refresh()}
       />
 
+      {/* Lightweight Standalone PDF Viewer */}
       <PdfViewerModal
         open={pdfViewerOpen}
         onOpenChange={setPdfViewerOpen}
@@ -838,6 +889,20 @@ export function SubjectTopicsTab({
         pdfUrl={activePdfUrl}
         fileName={activePdfFileName}
       />
+
+      {/* Integrated Study Workspace with Notes & Bookmarks */}
+      {workspaceTopic && (
+        <StudyWorkspaceModal
+          open={workspaceOpen}
+          onOpenChange={setWorkspaceOpen}
+          topicId={workspaceTopic.id}
+          topicTitle={workspaceTopic.title}
+          subjectId={subjectId}
+          materialId={workspaceMaterial?.id}
+          pdfUrl={workspaceMaterial?.fileUrl}
+          fileName={workspaceMaterial?.fileName}
+        />
+      )}
     </div>
   );
 }

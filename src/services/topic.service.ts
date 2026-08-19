@@ -10,6 +10,9 @@ import {
   compareTopicsNatural,
 } from "@/domain/topics";
 
+import { getNotesCountsBySubjectId } from "./topic-note.service";
+import { getBookmarksCountsBySubjectId } from "./material-bookmark.service";
+
 export async function getTopicsBySubjectId(subjectId: string) {
   const topicList = await db
     .select({
@@ -34,7 +37,16 @@ export async function getTopicsBySubjectId(subjectId: string) {
     .where(eq(topics.subjectId, subjectId))
     .orderBy(asc(topics.orderIndex), asc(topics.createdAt));
 
-  return topicList;
+  const [notesCountMap, bookmarksCountMap] = await Promise.all([
+    getNotesCountsBySubjectId(subjectId).catch((): Record<string, number> => ({})),
+    getBookmarksCountsBySubjectId(subjectId).catch((): Record<string, number> => ({})),
+  ]);
+
+  return topicList.map((t) => ({
+    ...t,
+    notesCount: notesCountMap[t.id] || 0,
+    bookmarksCount: bookmarksCountMap[t.id] || 0,
+  }));
 }
 
 export async function getSubjectTopicsSummary(subjectId: string) {

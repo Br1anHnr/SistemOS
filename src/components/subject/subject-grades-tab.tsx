@@ -427,7 +427,7 @@ export function SubjectGradesTab({
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="0"
                   max="10"
                   value={targetAverageInput}
@@ -462,7 +462,7 @@ export function SubjectGradesTab({
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="0"
                   max="10"
                   value={simulatedGrade}
@@ -695,8 +695,8 @@ export function SubjectGradesTab({
                     <span className="text-[10px] text-neutral-400">Peso:</span>
                     <Input
                       type="number"
-                      step="0.1"
-                      min="0.1"
+                      step="any"
+                      min="0"
                       value={comp.weight}
                       onChange={(e) => handleComponentChange(idx, "weight", Number(e.target.value))}
                       className="w-16 text-center font-mono text-xs h-8"
@@ -721,7 +721,7 @@ export function SubjectGradesTab({
                 </label>
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="0"
                   max="10"
                   value={passingGrade}
@@ -736,7 +736,7 @@ export function SubjectGradesTab({
                 </label>
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="0"
                   max="10"
                   value={examTriggerThreshold}

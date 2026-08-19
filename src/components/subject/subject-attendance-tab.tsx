@@ -11,8 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   calculateAttendancePercentage,
   calculateMaximumAbsences,
@@ -22,6 +27,7 @@ import {
 } from "@/domain/attendance";
 import {
   recordAttendanceAction,
+  bulkRecordAttendanceAction,
   createClassSessionAction,
   generateClassSessionsAction,
   updateClassSessionStatusAction,
@@ -41,6 +47,10 @@ import {
   Trash2,
   Loader2,
   Ban,
+  Filter,
+  CheckCheck,
+  CalendarDays,
+  ChevronRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { DAYS_OF_WEEK } from "@/lib/date-utils";
@@ -76,8 +86,15 @@ export function SubjectAttendanceTab({
   const { toast } = useToast();
 
   const [generating, setGenerating] = React.useState(false);
+  const [bulkLoading, setBulkLoading] = React.useState(false);
   const [manualModalOpen, setManualModalOpen] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
+
+  // Filters
+  const [statusFilter, setStatusFilter] = React.useState<
+    "ALL" | "PENDING" | "ABSENT" | "PRESENT" | "CANCELED"
+  >("ALL");
+  const [selectedMonth, setSelectedMonth] = React.useState<string>("CURRENT_OR_FIRST");
 
   // Manual class form state
   const [manualDate, setManualDate] = React.useState(
@@ -90,22 +107,159 @@ export function SubjectAttendanceTab({
   // Simulator state
   const [simulatedUnits, setSimulatedUnits] = React.useState<number>(1);
 
-  // Map to AttendanceInput for pure domain calculations
+  // Sort sessions chronologically (closest/earliest date first)
+  const sortedSessions = React.useMemo(() => {
+    return [...sessions].sort((a, b) => {
+      const dateA = a.date + (a.startTime || "");
+      const dateB = b.date + (b.startTime || "");
+      return dateA.localeCompare(dateB);
+    });
+  }, [sessions]);
+
+  // Group sessions by Month (e.g. "2026-02")
+  const monthsMap = React.useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        sessions: ClassSessionWithAttendance[];
+        pendingCount: number;
+        presentCount: number;
+        absentCount: number;
+      }
+    >();
+
+    for (const sess of sortedSessions) {
+      const monthKey = sess.date.substring(0, 7); // "YYYY-MM"
+      const dateObj = new Date(sess.date + "T00:00:00");
+      const monthName = dateObj.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      });
+      // Capitalize month name
+      const formattedLabel =
+        monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+      if (!map.has(monthKey)) {
+        map.set(monthKey, {
+          key: monthKey,
+          label: formattedLabel,
+          sessions: [],
+          pendingCount: 0,
+          presentCount: 0,
+          absentCount: 0,
+        });
+      }
+
+      const group = map.get(monthKey)!;
+      group.sessions.push(sess);
+
+      const status = sess.attendance?.status || "NOT_RECORDED";
+      if (sess.status !== "CANCELED") {
+        if (status === "NOT_RECORDED" && sess.status === "SCHEDULED") {
+          group.pendingCount++;
+        } else if (status === "PRESENT") {
+          group.presentCount++;
+        } else if (status === "ABSENT" || status === "PARTIAL") {
+          group.absentCount++;
+        }
+      }
+    }
+
+    return map;
+  }, [sortedSessions]);
+
+  const monthKeys = React.useMemo(() => Array.from(monthsMap.keys()), [monthsMap]);
+
+  // Determine active month tab
+  const activeMonthKey = React.useMemo(() => {
+    if (selectedMonth !== "CURRENT_OR_FIRST" && selectedMonth !== "ALL") {
+      if (monthsMap.has(selectedMonth)) return selectedMonth;
+    }
+    if (selectedMonth === "ALL") return "ALL";
+
+    // Try current calendar month
+    const todayMonth = new Date().toISOString().substring(0, 7);
+    if (monthsMap.has(todayMonth)) {
+      return todayMonth;
+    }
+
+    // Otherwise first month or ALL
+    return monthKeys[0] || "ALL";
+  }, [selectedMonth, monthsMap, monthKeys]);
+
+  // Find next upcoming / today's class
+  const todayStr = new Date().toISOString().split("T")[0];
+  const nextSession = React.useMemo(() => {
+    // Look for first non-canceled session today or in future that is pending or held today
+    const upcoming = sortedSessions.find(
+      (s) =>
+        s.status !== "CANCELED" &&
+        s.date >= todayStr &&
+        (!s.attendance || s.attendance.status === "NOT_RECORDED")
+    );
+    if (upcoming) return upcoming;
+
+    // Fallback to first pending class overall
+    const firstPending = sortedSessions.find(
+      (s) =>
+        s.status !== "CANCELED" &&
+        (!s.attendance || s.attendance.status === "NOT_RECORDED")
+    );
+    return firstPending || sortedSessions[0] || null;
+  }, [sortedSessions, todayStr]);
+
+  // Filtered sessions for the current view
+  const visibleSessions = React.useMemo(() => {
+    let list = sortedSessions;
+
+    if (activeMonthKey !== "ALL") {
+      const monthGroup = monthsMap.get(activeMonthKey);
+      list = monthGroup ? monthGroup.sessions : [];
+    }
+
+    return list.filter((sess) => {
+      const attStatus = sess.attendance?.status || "NOT_RECORDED";
+      if (statusFilter === "PENDING") {
+        return (
+          sess.status !== "CANCELED" &&
+          (attStatus === "NOT_RECORDED" || !sess.attendance)
+        );
+      }
+      if (statusFilter === "ABSENT") {
+        return (
+          sess.status !== "CANCELED" &&
+          (attStatus === "ABSENT" || attStatus === "PARTIAL")
+        );
+      }
+      if (statusFilter === "PRESENT") {
+        return sess.status !== "CANCELED" && attStatus === "PRESENT";
+      }
+      if (statusFilter === "CANCELED") {
+        return sess.status === "CANCELED";
+      }
+      return true;
+    });
+  }, [sortedSessions, activeMonthKey, monthsMap, statusFilter]);
+
+  // Domain Calculations
   const attendanceInputs: AttendanceInput[] = React.useMemo(() => {
-    return sessions.map((s) => ({
+    return sortedSessions.map((s) => ({
       session: {
         absenceUnits: s.absenceUnits,
         isCanceled: s.status === "CANCELED",
       },
       absentUnits: s.attendance ? s.attendance.absentUnits : 0,
     }));
-  }, [sessions]);
+  }, [sortedSessions]);
 
-  const activeSessions = sessions.filter((s) => s.status !== "CANCELED");
+  const activeSessions = sortedSessions.filter((s) => s.status !== "CANCELED");
   const totalUnits = activeSessions.reduce((sum, s) => sum + s.absenceUnits, 0);
-  const totalAbsentUnits = sessions.reduce(
+  const totalAbsentUnits = sortedSessions.reduce(
     (sum, s) =>
-      sum + (s.status !== "CANCELED" && s.attendance ? s.attendance.absentUnits : 0),
+      sum +
+      (s.status !== "CANCELED" && s.attendance ? s.attendance.absentUnits : 0),
     0
   );
 
@@ -148,7 +302,7 @@ export function SubjectAttendanceTab({
       );
 
       if (res.success) {
-        toast("Frequência registrada!");
+        toast("Frequência registrada com sucesso!");
         router.refresh();
       } else {
         toast(res.error || "Erro ao registrar.", "error");
@@ -160,13 +314,64 @@ export function SubjectAttendanceTab({
     }
   };
 
+  const handleMarkAllMonthPresent = async () => {
+    if (activeMonthKey === "ALL") {
+      toast("Selecione um mês específico para marcar todas como presentes.", "error");
+      return;
+    }
+
+    const monthGroup = monthsMap.get(activeMonthKey);
+    if (!monthGroup) return;
+
+    const pendingIds = monthGroup.sessions
+      .filter(
+        (s) =>
+          s.status !== "CANCELED" &&
+          (!s.attendance || s.attendance.status === "NOT_RECORDED")
+      )
+      .map((s) => s.id);
+
+    if (pendingIds.length === 0) {
+      toast("Todas as aulas deste mês já possuem registro.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Deseja marcar como PRESENTE todas as ${pendingIds.length} aulas pendentes de ${monthGroup.label}?`
+      )
+    ) {
+      return;
+    }
+
+    setBulkLoading(true);
+    try {
+      const res = await bulkRecordAttendanceAction(
+        pendingIds,
+        "PRESENT",
+        0,
+        subjectId
+      );
+      if (res.success) {
+        toast(`${res.count} aulas marcadas como Presente!`);
+        router.refresh();
+      } else {
+        toast(res.error || "Erro ao atualizar em lote.", "error");
+      }
+    } catch {
+      toast("Erro ao marcar presenças.", "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const handleToggleCancel = async (session: ClassSessionWithAttendance) => {
     const newStatus = session.status === "CANCELED" ? "SCHEDULED" : "CANCELED";
     setActionLoadingId(session.id);
     try {
       const res = await updateClassSessionStatusAction(session.id, subjectId, newStatus);
       if (res.success) {
-        toast(newStatus === "CANCELED" ? "Aula marcada como cancelada." : "Aula restaurada.");
+        toast(newStatus === "CANCELED" ? "Aula cancelada." : "Aula reativada.");
         router.refresh();
       } else {
         toast(res.error || "Erro ao atualizar aula.", "error");
@@ -179,7 +384,7 @@ export function SubjectAttendanceTab({
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!confirm("Deseja remover esta aula da lista?")) return;
+    if (!confirm("Deseja excluir esta aula do cronograma?")) return;
     try {
       const res = await deleteClassSessionAction(sessionId, subjectId);
       if (res.success) {
@@ -223,7 +428,7 @@ export function SubjectAttendanceTab({
       });
 
       if (res.success) {
-        toast("Aula criada com sucesso!");
+        toast("Aula extra adicionada com sucesso!");
         setManualModalOpen(false);
         router.refresh();
       } else {
@@ -254,7 +459,13 @@ export function SubjectAttendanceTab({
           </div>
           <div className="mt-2 flex items-center gap-1.5">
             <Badge
-              variant={isAtRisk ? "destructive" : percentage !== null && percentage >= minimumAttendancePercentage ? "success" : "warning"}
+              variant={
+                isAtRisk
+                  ? "destructive"
+                  : percentage !== null && percentage >= minimumAttendancePercentage
+                  ? "success"
+                  : "warning"
+              }
               className="text-[10px]"
             >
               {isAtRisk ? "Risco de Reprovação" : "Frequência Regular"}
@@ -272,7 +483,7 @@ export function SubjectAttendanceTab({
             {totalAbsentUnits}
           </div>
           <div className="mt-2 text-[11px] text-neutral-400">
-            unidade(s) de ausência
+            unidade(s) de falta em {totalUnits} aulas
           </div>
         </Card>
 
@@ -286,7 +497,7 @@ export function SubjectAttendanceTab({
             {maxAbsences}
           </div>
           <div className="mt-2 text-[11px] text-neutral-400">
-            faltas permitidas (25% de {totalUnits} aulas)
+            faltas permitidas ({(100 - minimumAttendancePercentage)}% de {totalUnits})
           </div>
         </Card>
 
@@ -301,15 +512,92 @@ export function SubjectAttendanceTab({
           </div>
           <div className="mt-2 text-[11px] text-neutral-400">
             {remainingAbsences === 0
-              ? "Limite atingido ou excedido"
+              ? "Limite de faltas atingido!"
               : "ausência(s) antes de reprovar"}
           </div>
         </Card>
       </div>
 
+      {/* Next Class Quick Action Hero Card */}
+      {nextSession && (
+        <Card className="border-neutral-800 bg-gradient-to-r from-blue-950/20 via-neutral-900/50 to-neutral-900/30 p-4 border-l-4 border-l-blue-500">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg bg-blue-950/80 border border-blue-850 text-blue-300 font-mono shrink-0">
+                <span className="text-[10px] uppercase">
+                  {new Date(nextSession.date + "T00:00:00")
+                    .toLocaleDateString("pt-BR", { month: "short" })
+                    .replace(".", "")}
+                </span>
+                <span className="text-base font-bold leading-none">
+                  {new Date(nextSession.date + "T00:00:00").getDate()}
+                </span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                    {nextSession.date === todayStr ? "Aula de Hoje" : "Próxima Aula na Grade"}
+                  </span>
+                  <span className="text-xs text-neutral-400 font-medium">
+                    {new Date(nextSession.date + "T00:00:00").toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                    })}
+                  </span>
+                  {nextSession.startTime && (
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {nextSession.startTime.substring(0, 5)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-neutral-300 mt-1">
+                  Status atual:{" "}
+                  <strong className="text-neutral-100">
+                    {nextSession.attendance?.status === "PRESENT"
+                      ? "Presente"
+                      : nextSession.attendance?.status === "ABSENT"
+                      ? "Falta"
+                      : "Pendente de registro"}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant={
+                  nextSession.attendance?.status === "PRESENT" ? "default" : "outline"
+                }
+                onClick={() => handleRecord(nextSession.id, "PRESENT", 0)}
+                disabled={actionLoadingId === nextSession.id}
+                className="h-8 text-xs bg-emerald-700/80 hover:bg-emerald-600 border-emerald-600 text-white"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                Marcar Presença
+              </Button>
+
+              <Button
+                size="sm"
+                variant={
+                  nextSession.attendance?.status === "ABSENT" ? "destructive" : "outline"
+                }
+                onClick={() =>
+                  handleRecord(nextSession.id, "ABSENT", nextSession.absenceUnits)
+                }
+                disabled={actionLoadingId === nextSession.id}
+                className="h-8 text-xs border-red-800 text-red-300 hover:bg-red-950/60"
+              >
+                <XCircle className="h-3.5 w-3.5 mr-1" />
+                Registrar Falta
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Simulator Card */}
       <Card className="border-neutral-800 bg-neutral-900/30 p-4">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-4 w-4 text-blue-400" />
           <h4 className="text-sm font-semibold text-neutral-100">
             Simulador de Faltas
@@ -322,6 +610,7 @@ export function SubjectAttendanceTab({
           <div className="flex items-center gap-2">
             <Input
               type="number"
+              step="any"
               min="1"
               max="20"
               value={simulatedUnits}
@@ -335,24 +624,25 @@ export function SubjectAttendanceTab({
           </div>
           {simulatedPercentage !== null && simulatedPercentage < minimumAttendancePercentage && (
             <Badge variant="destructive" className="text-[10px]">
-              Abaixo do mínimo!
+              Abaixo do mínimo ({minimumAttendancePercentage}%)!
             </Badge>
           )}
         </div>
       </Card>
 
-      {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Main Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
         <div>
-          <h3 className="text-sm font-semibold text-neutral-100">
-            Registro de Aulas e Presenças ({sessions.length})
+          <h3 className="text-sm font-semibold text-neutral-100 flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-neutral-400" />
+            Cronograma de Aulas e Chamada ({sortedSessions.length} aulas)
           </h3>
           <p className="text-xs text-neutral-400">
-            Marque presenças, faltas e justifique ausências por aula.
+            Organizado em ordem cronológica por mês para fácil navegação e acompanhamento.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -379,15 +669,14 @@ export function SubjectAttendanceTab({
         </div>
       </div>
 
-      {/* Sessions List */}
-      {sessions.length === 0 ? (
+      {sortedSessions.length === 0 ? (
         <div className="p-8 rounded-lg border border-dashed border-neutral-800 text-center space-y-3">
           <Calendar className="h-8 w-8 text-neutral-500 mx-auto" />
           <h4 className="text-sm font-semibold text-neutral-200">
-            Nenhuma aula registrada ainda
+            Nenhuma aula gerada ainda
           </h4>
           <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-            Clique em &quot;Gerar Aulas do Semestre&quot; para preencher o cronograma automaticamente com base nos horários cadastrados da disciplina.
+            Clique em &quot;Gerar Aulas do Semestre&quot; para preencher o cronograma com base nos horários cadastrados da disciplina.
           </p>
           <Button size="sm" onClick={handleGenerate} disabled={generating}>
             <Wand2 className="h-4 w-4 mr-1.5" />
@@ -395,121 +684,281 @@ export function SubjectAttendanceTab({
           </Button>
         </div>
       ) : (
-        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-          {sessions.map((sess) => {
-            const isCanceled = sess.status === "CANCELED";
-            const attendanceStatus = sess.attendance?.status || "NOT_RECORDED";
-            const sessionDate = new Date(sess.date + "T00:00:00");
-            const dayOfWeekName = DAYS_OF_WEEK[sessionDate.getDay()] || "";
+        <div className="space-y-4">
+          {/* Month Tabs Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-neutral-850 text-xs">
+            {monthKeys.map((monthKey) => {
+              const group = monthsMap.get(monthKey)!;
+              const isSelected = activeMonthKey === monthKey;
 
-            return (
-              <div
-                key={sess.id}
-                className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border transition-colors ${
-                  isCanceled
-                    ? "bg-neutral-950/40 border-neutral-900 opacity-60 line-through"
-                    : attendanceStatus === "ABSENT"
-                    ? "bg-red-950/20 border-red-900/40"
-                    : attendanceStatus === "PRESENT"
-                    ? "bg-emerald-950/15 border-emerald-900/30"
-                    : "bg-neutral-900/30 border-neutral-800"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-center justify-center h-10 w-10 rounded bg-neutral-950 border border-neutral-850 font-mono text-center shrink-0">
-                    <span className="text-[10px] text-neutral-500 uppercase">
-                      {sessionDate.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}
-                    </span>
-                    <span className="text-sm font-bold text-neutral-100 leading-none">
-                      {sessionDate.getDate()}
-                    </span>
-                  </div>
+              return (
+                <button
+                  key={monthKey}
+                  onClick={() => setSelectedMonth(monthKey)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-all ${
+                    isSelected
+                      ? "bg-neutral-800 text-white font-semibold shadow-sm"
+                      : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+                  }`}
+                >
+                  <span>{group.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                      isSelected
+                        ? "bg-neutral-700 text-neutral-100"
+                        : "bg-neutral-900 text-neutral-500"
+                    }`}
+                  >
+                    {group.sessions.length}
+                  </span>
+                  {group.pendingCount > 0 && (
+                    <span
+                      className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
+                      title={`${group.pendingCount} pendentes`}
+                    />
+                  )}
+                </button>
+              );
+            })}
 
-                  <div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-neutral-200">
-                        {sessionDate.toLocaleDateString("pt-BR")} ({dayOfWeekName})
-                      </span>
-                      {sess.startTime && (
-                        <span className="text-neutral-400">
-                          • {sess.startTime.substring(0, 5)}
-                        </span>
-                      )}
-                      {sess.absenceUnits > 1 && (
-                        <Badge variant="outline" className="text-[10px] font-mono">
-                          {sess.absenceUnits}x unidades
-                        </Badge>
-                      )}
-                      {isCanceled && (
-                        <Badge variant="destructive" className="text-[10px]">
-                          Cancelada
-                        </Badge>
-                      )}
-                    </div>
+            <button
+              onClick={() => setSelectedMonth("ALL")}
+              className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-all ${
+                activeMonthKey === "ALL"
+                  ? "bg-neutral-800 text-white font-semibold"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+              }`}
+            >
+              Todos os Meses ({sortedSessions.length})
+            </button>
+          </div>
 
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
-                      Status:{" "}
-                      <strong className="text-neutral-300">
-                        {isCanceled
-                          ? "Aula cancelada (não conta no cálculo)"
-                          : attendanceStatus === "PRESENT"
-                          ? "Presente"
-                          : attendanceStatus === "ABSENT"
-                          ? `Falta (${sess.attendance?.absentUnits} unidade)`
-                          : attendanceStatus === "PARTIAL"
-                          ? "Falta Parcial"
-                          : attendanceStatus === "EXCUSED"
-                          ? "Falta Justificada"
-                          : "Não registrada"}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                {!isCanceled && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant={attendanceStatus === "PRESENT" ? "default" : "outline"}
-                      onClick={() => handleRecord(sess.id, "PRESENT", 0)}
-                      disabled={actionLoadingId === sess.id}
-                      className="h-7 text-xs px-2.5"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                      Presente
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant={attendanceStatus === "ABSENT" ? "destructive" : "outline"}
-                      onClick={() => handleRecord(sess.id, "ABSENT", sess.absenceUnits)}
-                      disabled={actionLoadingId === sess.id}
-                      className="h-7 text-xs px-2.5 border-neutral-750"
-                    >
-                      <XCircle className="h-3.5 w-3.5 mr-1" />
-                      Falta
-                    </Button>
-
-                    <button
-                      onClick={() => handleToggleCancel(sess)}
-                      className="p-1.5 text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
-                      title="Marcar como cancelada"
-                    >
-                      <Ban className="h-3.5 w-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteSession(sess.id)}
-                      className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors"
-                      title="Excluir aula"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+          {/* Month Summary Bar & Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg bg-neutral-950/60 border border-neutral-850 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-neutral-400 font-medium flex items-center gap-1">
+                <Filter className="h-3.5 w-3.5 text-neutral-500" />
+                Filtro:
+              </span>
+              <div className="flex rounded-md bg-neutral-900 border border-neutral-800 p-0.5">
+                <button
+                  onClick={() => setStatusFilter("ALL")}
+                  className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                    statusFilter === "ALL"
+                      ? "bg-neutral-800 text-white font-medium"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  Todas ({visibleSessions.length})
+                </button>
+                <button
+                  onClick={() => setStatusFilter("PENDING")}
+                  className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                    statusFilter === "PENDING"
+                      ? "bg-neutral-800 text-white font-medium"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  Pendentes
+                </button>
+                <button
+                  onClick={() => setStatusFilter("ABSENT")}
+                  className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                    statusFilter === "ABSENT"
+                      ? "bg-neutral-800 text-white font-medium"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  Faltas
+                </button>
+                <button
+                  onClick={() => setStatusFilter("PRESENT")}
+                  className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                    statusFilter === "PRESENT"
+                      ? "bg-neutral-800 text-white font-medium"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  Presentes
+                </button>
               </div>
-            );
-          })}
+            </div>
+
+            {activeMonthKey !== "ALL" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMarkAllMonthPresent}
+                disabled={bulkLoading}
+                className="h-7 text-xs border-neutral-750 text-neutral-300 hover:text-white"
+              >
+                {bulkLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-3.5 w-3.5 mr-1 text-emerald-400" />
+                )}
+                Marcar mês como Presente
+              </Button>
+            )}
+          </div>
+
+          {/* Classes List */}
+          <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
+            {visibleSessions.length === 0 ? (
+              <div className="p-6 rounded-lg border border-dashed border-neutral-850 text-center text-xs text-neutral-400">
+                Nenhuma aula encontrada para os filtros selecionados.
+              </div>
+            ) : (
+              visibleSessions.map((sess) => {
+                const isCanceled = sess.status === "CANCELED";
+                const attendanceStatus = sess.attendance?.status || "NOT_RECORDED";
+                const sessionDate = new Date(sess.date + "T00:00:00");
+                const dayOfWeekName = DAYS_OF_WEEK[sessionDate.getDay()] || "";
+                const isToday = sess.date === todayStr;
+
+                return (
+                  <div
+                    key={sess.id}
+                    className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border transition-all ${
+                      isCanceled
+                        ? "bg-neutral-950/40 border-neutral-900 opacity-60 line-through"
+                        : isToday
+                        ? "bg-blue-950/20 border-blue-800/60 ring-1 ring-blue-700/30"
+                        : attendanceStatus === "ABSENT"
+                        ? "bg-red-950/20 border-red-900/40"
+                        : attendanceStatus === "PRESENT"
+                        ? "bg-emerald-950/15 border-emerald-900/30"
+                        : "bg-neutral-900/30 border-neutral-800"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex flex-col items-center justify-center h-10 w-10 rounded border font-mono text-center shrink-0 ${
+                          isToday
+                            ? "bg-blue-900/50 border-blue-600 text-blue-200"
+                            : "bg-neutral-950 border-neutral-850"
+                        }`}
+                      >
+                        <span className="text-[10px] text-neutral-400 uppercase leading-none">
+                          {sessionDate
+                            .toLocaleDateString("pt-BR", { month: "short" })
+                            .replace(".", "")}
+                        </span>
+                        <span className="text-sm font-bold text-neutral-100 leading-none mt-0.5">
+                          {sessionDate.getDate()}
+                        </span>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 text-xs flex-wrap">
+                          <span className="font-semibold text-neutral-200">
+                            {sessionDate.toLocaleDateString("pt-BR")} ({dayOfWeekName})
+                          </span>
+                          {sess.startTime && (
+                            <span className="text-neutral-400 font-mono">
+                              • {sess.startTime.substring(0, 5)}
+                            </span>
+                          )}
+                          {sess.absenceUnits > 1 && (
+                            <Badge variant="outline" className="text-[10px] font-mono">
+                              {sess.absenceUnits}x unidades
+                            </Badge>
+                          )}
+                          {isToday && (
+                            <Badge variant="info" className="text-[10px]">
+                              Hoje
+                            </Badge>
+                          )}
+                          {isCanceled && (
+                            <Badge variant="destructive" className="text-[10px]">
+                              Cancelada
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="text-[11px] text-neutral-400 mt-0.5">
+                          Status:{" "}
+                          <strong
+                            className={
+                              attendanceStatus === "PRESENT"
+                                ? "text-emerald-400"
+                                : attendanceStatus === "ABSENT"
+                                ? "text-red-400"
+                                : "text-neutral-300"
+                            }
+                          >
+                            {isCanceled
+                              ? "Aula cancelada (não afeta cálculo)"
+                              : attendanceStatus === "PRESENT"
+                              ? "Presente"
+                              : attendanceStatus === "ABSENT"
+                              ? `Falta (${sess.attendance?.absentUnits} unidade)`
+                              : attendanceStatus === "PARTIAL"
+                              ? "Falta Parcial"
+                              : attendanceStatus === "EXCUSED"
+                              ? "Falta Justificada"
+                              : "Não registrada"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isCanceled && (
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        <Button
+                          size="sm"
+                          variant={
+                            attendanceStatus === "PRESENT" ? "default" : "outline"
+                          }
+                          onClick={() => handleRecord(sess.id, "PRESENT", 0)}
+                          disabled={actionLoadingId === sess.id}
+                          className={`h-7 text-xs px-2.5 ${
+                            attendanceStatus === "PRESENT"
+                              ? "bg-emerald-700 hover:bg-emerald-600 text-white"
+                              : "border-neutral-750"
+                          }`}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          Presente
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant={
+                            attendanceStatus === "ABSENT" ? "destructive" : "outline"
+                          }
+                          onClick={() =>
+                            handleRecord(sess.id, "ABSENT", sess.absenceUnits)
+                          }
+                          disabled={actionLoadingId === sess.id}
+                          className="h-7 text-xs px-2.5 border-neutral-750"
+                        >
+                          <XCircle className="h-3.5 w-3.5 mr-1" />
+                          Falta
+                        </Button>
+
+                        <button
+                          onClick={() => handleToggleCancel(sess)}
+                          className="p-1.5 text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
+                          title="Marcar como cancelada"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteSession(sess.id)}
+                          className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors"
+                          title="Excluir aula"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
@@ -565,6 +1014,7 @@ export function SubjectAttendanceTab({
               </label>
               <Input
                 type="number"
+                step="any"
                 min="1"
                 max="5"
                 value={manualUnits}

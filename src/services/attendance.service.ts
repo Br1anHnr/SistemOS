@@ -20,7 +20,7 @@ export async function getClassSessionsWithAttendanceBySubjectId(subjectId: strin
     .select()
     .from(classSessions)
     .where(eq(classSessions.subjectId, subjectId))
-    .orderBy(desc(classSessions.date), desc(classSessions.startTime));
+    .orderBy(asc(classSessions.date), asc(classSessions.startTime));
 
   if (sessions.length === 0) return [];
 
@@ -165,6 +165,24 @@ export async function recordAttendance(data: {
   }
 
   return record;
+}
+
+export async function bulkRecordAttendance(
+  classSessionIds: string[],
+  status: "PRESENT" | "ABSENT" | "PARTIAL" | "EXCUSED",
+  absentUnits: number
+) {
+  if (classSessionIds.length === 0) return { count: 0 };
+
+  for (const sessionId of classSessionIds) {
+    await recordAttendance({
+      classSessionId: sessionId,
+      status,
+      absentUnits,
+    });
+  }
+
+  return { count: classSessionIds.length };
 }
 
 export async function createClassSession(data: {

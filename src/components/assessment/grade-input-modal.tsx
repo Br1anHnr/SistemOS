@@ -126,7 +126,7 @@ export function GradeInputModal({
             </label>
             <Input
               type="number"
-              step="0.01"
+              step="any"
               min="0"
               max={assessment.maxGrade}
               value={grade}

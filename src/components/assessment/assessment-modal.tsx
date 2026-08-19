@@ -225,8 +225,8 @@ export function AssessmentModal({
               </label>
               <Input
                 type="number"
-                step="0.5"
-                min="0.1"
+                step="any"
+                min="0"
                 max="100"
                 value={maxGrade}
                 onChange={(e) => setMaxGrade(Number(e.target.value))}
@@ -239,7 +239,7 @@ export function AssessmentModal({
               </label>
               <Input
                 type="number"
-                step="0.01"
+                step="any"
                 min="0"
                 max={maxGrade}
                 value={grade}

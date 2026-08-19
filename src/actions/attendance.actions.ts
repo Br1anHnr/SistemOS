@@ -33,6 +33,32 @@ export async function recordAttendanceAction(
   }
 }
 
+export async function bulkRecordAttendanceAction(
+  classSessionIds: string[],
+  status: "PRESENT" | "ABSENT" | "PARTIAL" | "EXCUSED",
+  absentUnits: number,
+  subjectId?: string
+) {
+  try {
+    const result = await attendanceService.bulkRecordAttendance(
+      classSessionIds,
+      status,
+      absentUnits
+    );
+    if (subjectId) {
+      revalidatePath(`/subjects/${subjectId}`);
+    }
+    revalidatePath("/attendance");
+    revalidatePath("/");
+    return { success: true, count: result.count };
+  } catch (error) {
+    if (error instanceof Error) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Erro ao registrar em lote." };
+  }
+}
+
 export async function createClassSessionAction(formData: unknown) {
   try {
     const validated = createClassSessionSchema.parse(formData);

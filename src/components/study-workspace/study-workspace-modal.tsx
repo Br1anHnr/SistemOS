@@ -21,6 +21,7 @@ import {
 import { StudyPanel } from "./study-panel";
 import { AnnotationToolbar, AnnotationTool } from "./annotation-toolbar";
 import { AnnotationLayer, AnnotationData } from "./annotation-layer";
+import { PdfPinsLayer, PinCreationType } from "./pdf-pins-layer";
 import { PdfCanvasRenderer } from "./pdf-canvas-renderer";
 import { getPdfBlobUrl, storePdfFile } from "@/lib/pdf-storage";
 import { TopicNoteItem } from "./note-card";
@@ -30,6 +31,11 @@ import {
   createPdfAnnotationAction,
   deletePdfAnnotationAction,
 } from "@/actions/pdf-annotation.actions";
+import {
+  getAnchoredNotesAction,
+  createAnchoredNoteAction,
+} from "@/actions/pdf-note-anchor.actions";
+import { AnchoredTopicNoteItem } from "@/services/pdf-note-anchor.service";
 import { useToast } from "@/components/ui/toast";
 
 interface StudyWorkspaceModalProps {
@@ -82,6 +88,10 @@ export function StudyWorkspaceModal({
   const [annotations, setAnnotations] = React.useState<AnnotationData[]>([]);
   const [isSavingAnnotation, setIsSavingAnnotation] = React.useState<boolean>(false);
   const [lastSavedAnnotation, setLastSavedAnnotation] = React.useState<Date | null>(null);
+
+  // --- PINS & ANCHORED NOTES STATE (FASE B2) ---
+  const [anchoredNotes, setAnchoredNotes] = React.useState<AnchoredTopicNoteItem[]>([]);
+  const [selectedNoteId, setSelectedNoteId] = React.useState<string | null>(null);
 
   // Undo / Redo History Stack for current page session
   const [history, setHistory] = React.useState<AnnotationData[][]>([]);
@@ -170,6 +180,23 @@ export function StudyWorkspaceModal({
 
     loadPageAnnotations();
   }, [open, topicId, currentPage]);
+
+  // 3. Fetch anchored notes from DB for topic
+  const loadAnchoredNotes = React.useCallback(async () => {
+    if (!open || !topicId) return;
+    try {
+      const res = await getAnchoredNotesAction(topicId);
+      if (res.success && res.data) {
+        setAnchoredNotes(res.data as AnchoredTopicNoteItem[]);
+      }
+    } catch {
+      // Continue silently
+    }
+  }, [open, topicId]);
+
+  React.useEffect(() => {
+    loadAnchoredNotes();
+  }, [loadAnchoredNotes]);
 
   // Page Navigator Handlers
   const handleNavigateToPage = (pageNumber: number) => {
@@ -289,6 +316,59 @@ export function StudyWorkspaceModal({
       const nextIndex = historyIndex + 1;
       setHistoryIndex(nextIndex);
       setAnnotations(history[nextIndex]);
+    }
+  };
+
+  // --- ANCHORED NOTES (PINS & REGIONS) HANDLERS ---
+  const handleCreateAnchoredNote = async (data: {
+    type: PinCreationType;
+    content: string;
+    anchorType: "POINT" | "REGION";
+    anchorData: {
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+    };
+  }) => {
+    try {
+      const res = await createAnchoredNoteAction(
+        {
+          topicId,
+          materialId: materialId || null,
+          pageNumber: currentPage,
+          type: data.type,
+          content: data.content,
+          anchorType: data.anchorType,
+          anchorData: data.anchorData,
+        },
+        subjectId
+      );
+
+      if (res.success && res.data) {
+        toast(data.anchorType === "REGION" ? "Trecho registrado!" : "Pin fixado no slide!");
+        await loadAnchoredNotes();
+        setSelectedNoteId((res.data as any).id);
+        setIsPanelOpen(true);
+      } else {
+        toast(res.error || "Erro ao salvar comentário.", "error");
+      }
+    } catch {
+      toast("Erro ao fixar marcador no PDF.", "error");
+    }
+  };
+
+  // Bidirectional Selection: From PDF to StudyPanel
+  const handleSelectNoteFromPdf = (noteId: string) => {
+    setSelectedNoteId(noteId);
+    setIsPanelOpen(true);
+  };
+
+  // Bidirectional Selection: From StudyPanel to PDF
+  const handleSelectNoteFromPanel = (noteId: string, pageNumber?: number | null) => {
+    setSelectedNoteId(noteId);
+    if (pageNumber && pageNumber !== currentPage) {
+      handleNavigateToPage(pageNumber);
     }
   };
 
@@ -537,18 +617,37 @@ export function StudyWorkspaceModal({
                   onLoadSuccess={(pages) => setTotalPages(pages)}
                 >
                   {({ width, height }) => (
-                    <AnnotationLayer
-                      pageWidth={width}
-                      pageHeight={height}
-                      activeTool={isAnnotationMode ? activeTool : "SELECT"}
-                      color={color}
-                      strokeWidth={strokeWidth}
-                      annotations={annotations}
-                      isVisible={isAnnotationVisible}
-                      onAddAnnotation={handleAddAnnotation}
-                      onUpdateAnnotation={() => {}}
-                      onDeleteAnnotation={handleDeleteAnnotation}
-                    />
+                    <>
+                      {/* Graphical Drawings & Text Layer (Fase B1) */}
+                      <AnnotationLayer
+                        pageWidth={width}
+                        pageHeight={height}
+                        activeTool={
+                          isAnnotationMode && activeTool !== "PIN" && activeTool !== "REGION"
+                            ? activeTool
+                            : "SELECT"
+                        }
+                        color={color}
+                        strokeWidth={strokeWidth}
+                        annotations={annotations}
+                        isVisible={isAnnotationVisible}
+                        onAddAnnotation={handleAddAnnotation}
+                        onUpdateAnnotation={() => {}}
+                        onDeleteAnnotation={handleDeleteAnnotation}
+                      />
+
+                      {/* Pins and Regions Semantic Layer (Fase B2) */}
+                      <PdfPinsLayer
+                        pageWidth={width}
+                        pageHeight={height}
+                        pageNumber={currentPage}
+                        anchoredNotes={anchoredNotes}
+                        selectedNoteId={selectedNoteId}
+                        activeTool={isAnnotationMode ? activeTool : "SELECT"}
+                        onSelectNote={handleSelectNoteFromPdf}
+                        onCreateAnchoredNote={handleCreateAnchoredNote}
+                      />
+                    </>
                   )}
                 </PdfCanvasRenderer>
               ) : null}
@@ -563,8 +662,10 @@ export function StudyWorkspaceModal({
                   materialId={materialId}
                   subjectId={subjectId}
                   currentPageNumber={currentPage}
+                  selectedNoteId={selectedNoteId}
                   initialNotes={initialNotes}
                   initialBookmarks={initialBookmarks}
+                  onSelectNote={handleSelectNoteFromPanel}
                   onNavigateToPage={handleNavigateToPage}
                   onCollapse={() => setIsPanelOpen(false)}
                 />

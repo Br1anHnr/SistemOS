@@ -370,7 +370,7 @@ export const createMaterialSchema = z.object({
 // ─── Topic Study Notes ───────────────────────────────────────────────────────
 
 export const topicNoteTypeSchema = z.enum(
-  ["NOTE", "IMPORTANT", "QUESTION", "FORMULA"],
+  ["NOTE", "IMPORTANT", "QUESTION", "FORMULA", "EXAM"],
   {
     errorMap: () => ({ message: "Tipo de anotação inválido." }),
   }
@@ -459,5 +459,45 @@ export const updatePdfAnnotationSchema = z.object({
   data: z.record(z.any()).optional(),
   type: pdfAnnotationTypeSchema.optional(),
 });
+
+// ─── PDF Note Anchors (Pins & Regions - Fase B2) ─────────────────────────────
+
+export const pdfAnchorTypeSchema = z.enum(["POINT", "REGION"], {
+  errorMap: () => ({ message: "Tipo de âncora inválido." }),
+});
+
+export const createPdfNoteAnchorSchema = z.object({
+  noteId: z
+    .string({ required_error: "ID da nota é obrigatório." })
+    .uuid("ID de nota inválido."),
+  topicId: z
+    .string({ required_error: "ID do tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  pageNumber: z
+    .number({ required_error: "O número da página é obrigatório." })
+    .int("Número da página deve ser um inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1."),
+  anchorType: pdfAnchorTypeSchema.default("POINT"),
+  data: z.record(z.any()),
+});
+
+export const createAnchoredNoteSchema = z.object({
+  topicId: z
+    .string({ required_error: "ID do tópico é obrigatório." })
+    .uuid("ID de tópico inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  pageNumber: z
+    .number({ required_error: "O número da página é obrigatório." })
+    .int("Número da página deve ser um inteiro.")
+    .min(1, "O número da página deve ser no mínimo 1."),
+  type: topicNoteTypeSchema.default("NOTE"),
+  content: z
+    .string({ required_error: "O conteúdo da nota é obrigatório." })
+    .min(1, "O conteúdo da nota não pode ser vazio."),
+  anchorType: pdfAnchorTypeSchema.default("POINT"),
+  anchorData: z.record(z.any()),
+});
+
 
 

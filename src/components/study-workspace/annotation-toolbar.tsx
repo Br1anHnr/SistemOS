@@ -4,6 +4,8 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   MousePointer,
+  MapPin,
+  Crop,
   PenLine,
   Highlighter,
   MoveUpRight,
@@ -20,6 +22,8 @@ import {
 
 export type AnnotationTool =
   | "SELECT"
+  | "PIN"
+  | "REGION"
   | "PEN"
   | "HIGHLIGHT"
   | "ARROW"
@@ -77,6 +81,8 @@ export function AnnotationToolbar({
 }: AnnotationToolbarProps) {
   const tools = [
     { id: "SELECT" as AnnotationTool, label: "Seleção", icon: MousePointer },
+    { id: "PIN" as AnnotationTool, label: "Comentário / Pin", icon: MapPin },
+    { id: "REGION" as AnnotationTool, label: "Selecionar Trecho", icon: Crop },
     { id: "PEN" as AnnotationTool, label: "Caneta", icon: PenLine },
     { id: "HIGHLIGHT" as AnnotationTool, label: "Marca-texto", icon: Highlighter },
     { id: "ARROW" as AnnotationTool, label: "Seta", icon: MoveUpRight },
@@ -84,6 +90,19 @@ export function AnnotationToolbar({
     { id: "TEXT" as AnnotationTool, label: "Texto", icon: Type },
     { id: "ERASER" as AnnotationTool, label: "Borracha", icon: Eraser },
   ];
+
+  const showsColor =
+    activeTool === "PEN" ||
+    activeTool === "HIGHLIGHT" ||
+    activeTool === "ARROW" ||
+    activeTool === "RECTANGLE" ||
+    activeTool === "TEXT";
+
+  const showsStroke =
+    activeTool === "PEN" ||
+    activeTool === "HIGHLIGHT" ||
+    activeTool === "ARROW" ||
+    activeTool === "RECTANGLE";
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-900/95 backdrop-blur-md border border-neutral-750 rounded-xl shadow-2xl text-xs text-neutral-200 select-none animate-in fade-in slide-in-from-top-2 duration-200">
@@ -110,8 +129,8 @@ export function AnnotationToolbar({
         })}
       </div>
 
-      {/* Color Palette (Active for Pen, Highlight, Arrow, Rectangle, Text) */}
-      {activeTool !== "ERASER" && activeTool !== "SELECT" && (
+      {/* Color Palette */}
+      {showsColor && (
         <div className="flex items-center gap-1.5 border-r border-neutral-800 pr-2">
           {COLOR_PALETTE.map((c) => {
             const isSelected = color === c.value;
@@ -132,7 +151,7 @@ export function AnnotationToolbar({
       )}
 
       {/* Stroke Width Selector */}
-      {activeTool !== "ERASER" && activeTool !== "SELECT" && activeTool !== "TEXT" && (
+      {showsStroke && (
         <div className="flex items-center gap-1 border-r border-neutral-800 pr-2">
           {STROKE_WIDTHS.map((s) => {
             const isSelected = strokeWidth === s.value;

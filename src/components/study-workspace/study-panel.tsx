@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import {
   NoteCard,
   TopicNoteItem,
@@ -16,24 +15,23 @@ import {
 } from "./bookmark-card";
 import {
   createTopicNoteAction,
-  getTopicNotesAction,
 } from "@/actions/topic-note.actions";
 import {
   createMaterialBookmarkAction,
   getTopicBookmarksAction,
 } from "@/actions/material-bookmark.actions";
+import {
+  getAnchoredNotesAction,
+} from "@/actions/pdf-note-anchor.actions";
 import { useToast } from "@/components/ui/toast";
 import {
   Plus,
   Bookmark,
   FileText,
-  AlertTriangle,
-  HelpCircle,
-  Binary,
   Loader2,
   ChevronRight,
-  Layers,
   Sparkles,
+  Filter,
 } from "lucide-react";
 
 interface StudyPanelProps {
@@ -42,13 +40,15 @@ interface StudyPanelProps {
   materialId?: string | null;
   subjectId?: string;
   currentPageNumber: number;
+  selectedNoteId?: string | null;
   initialNotes?: TopicNoteItem[];
   initialBookmarks?: MaterialBookmarkItem[];
+  onSelectNote?: (noteId: string, pageNumber?: number | null) => void;
   onNavigateToPage: (pageNumber: number) => void;
   onCollapse: () => void;
 }
 
-type TabType = "ALL" | "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "BOOKMARKS";
+type TabType = "ALL" | "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "EXAM" | "BOOKMARKS";
 
 export function StudyPanel({
   topicId,
@@ -56,14 +56,17 @@ export function StudyPanel({
   materialId,
   subjectId,
   currentPageNumber,
+  selectedNoteId,
   initialNotes = [],
   initialBookmarks = [],
+  onSelectNote,
   onNavigateToPage,
   onCollapse,
 }: StudyPanelProps) {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = React.useState<TabType>("ALL");
+  const [onlyCurrentPage, setOnlyCurrentPage] = React.useState<boolean>(false);
   const [notes, setNotes] = React.useState<TopicNoteItem[]>(initialNotes);
   const [bookmarks, setBookmarks] = React.useState<MaterialBookmarkItem[]>(
     initialBookmarks
@@ -75,7 +78,7 @@ export function StudyPanel({
 
   // New Note Form
   const [newNoteType, setNewNoteType] = React.useState<
-    "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA"
+    "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "EXAM"
   >("NOTE");
   const [newNoteContent, setNewNoteContent] = React.useState("");
   const [newNotePage, setNewNotePage] = React.useState<number>(currentPageNumber);
@@ -97,14 +100,14 @@ export function StudyPanel({
     }
   }, [currentPageNumber]);
 
-  // Load notes & bookmarks when topicId changes
+  // Load anchored notes & bookmarks when topicId changes
   React.useEffect(() => {
     async function loadData() {
       if (!topicId) return;
       setLoading(true);
       try {
         const [notesRes, bkmRes] = await Promise.all([
-          getTopicNotesAction(topicId),
+          getAnchoredNotesAction(topicId),
           getTopicBookmarksAction(topicId),
         ]);
         if (notesRes.success && notesRes.data) {
@@ -194,12 +197,24 @@ export function StudyPanel({
     }
   };
 
-  // Filtered notes
+  // Filtered items based on activeTab and onlyCurrentPage
   const filteredNotes = React.useMemo(() => {
-    if (activeTab === "ALL") return notes;
+    let result = notes;
+    if (onlyCurrentPage && currentPageNumber > 0) {
+      result = result.filter((n) => n.pageNumber === currentPageNumber);
+    }
+    if (activeTab === "ALL") return result;
     if (activeTab === "BOOKMARKS") return [];
-    return notes.filter((n) => n.type === activeTab);
-  }, [notes, activeTab]);
+    return result.filter((n) => n.type === activeTab);
+  }, [notes, activeTab, onlyCurrentPage, currentPageNumber]);
+
+  const filteredBookmarks = React.useMemo(() => {
+    let result = bookmarks;
+    if (onlyCurrentPage && currentPageNumber > 0) {
+      result = result.filter((b) => b.pageNumber === currentPageNumber);
+    }
+    return result;
+  }, [bookmarks, onlyCurrentPage, currentPageNumber]);
 
   const showBookmarks = activeTab === "ALL" || activeTab === "BOOKMARKS";
 
@@ -219,15 +234,32 @@ export function StudyPanel({
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCollapse}
-          className="h-7 text-xs px-2 text-neutral-400 hover:text-white"
-          title="Recolher painel"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {/* Only Current Page Filter Toggle */}
+          <button
+            type="button"
+            onClick={() => setOnlyCurrentPage((prev) => !prev)}
+            className={`px-2 py-1 rounded text-[10px] font-medium flex items-center gap-1 transition-colors ${
+              onlyCurrentPage
+                ? "bg-purple-600 text-white shadow-sm"
+                : "bg-neutral-850 text-neutral-400 hover:text-neutral-200"
+            }`}
+            title="Filtrar anotações apenas da página atual"
+          >
+            <Filter className="h-2.5 w-2.5" />
+            <span>Pág. {currentPageNumber}</span>
+          </button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCollapse}
+            className="h-7 text-xs px-2 text-neutral-400 hover:text-white"
+            title="Recolher painel"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -286,6 +318,17 @@ export function StudyPanel({
           }`}
         >
           Fórmulas ({notes.filter((n) => n.type === "FORMULA").length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("EXAM")}
+          className={`px-2 py-1 rounded font-medium transition-colors shrink-0 ${
+            activeTab === "EXAM"
+              ? "bg-red-950/70 text-red-200 border border-red-800/80"
+              : "text-neutral-400 hover:text-neutral-200"
+          }`}
+        >
+          Prova ({notes.filter((n) => n.type === "EXAM").length})
         </button>
         <button
           type="button"
@@ -354,15 +397,15 @@ export function StudyPanel({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-1 text-[10px]">
-            {(["NOTE", "IMPORTANT", "QUESTION", "FORMULA"] as const).map((t) => (
+          <div className="grid grid-cols-5 gap-1 text-[9px]">
+            {(["NOTE", "IMPORTANT", "QUESTION", "FORMULA", "EXAM"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setNewNoteType(t)}
                 className={`py-1 rounded border text-center font-medium transition-colors ${
                   newNoteType === t
-                    ? NOTE_TYPE_CONFIG[t].color + " ring-1 ring-white/20"
+                    ? NOTE_TYPE_CONFIG[t].color + " ring-1 ring-white/20 font-bold"
                     : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
                 }`}
               >
@@ -375,7 +418,7 @@ export function StudyPanel({
             rows={3}
             value={newNoteContent}
             onChange={(e) => setNewNoteContent(e.target.value)}
-            placeholder="Digite o resumo, fórmula ou dúvida..."
+            placeholder="Digite o resumo, fórmula, dúvida ou questão de prova..."
             className="w-full rounded border border-neutral-750 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-purple-500"
             autoFocus
           />
@@ -491,12 +534,12 @@ export function StudyPanel({
         ) : (
           <>
             {/* Bookmarks Section */}
-            {showBookmarks && bookmarks.length > 0 && (
+            {showBookmarks && filteredBookmarks.length > 0 && (
               <div className="space-y-1.5 pb-2">
                 <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider px-1">
-                  Marcadores ({bookmarks.length})
+                  Marcadores ({filteredBookmarks.length})
                 </div>
-                {bookmarks.map((b) => (
+                {filteredBookmarks.map((b) => (
                   <BookmarkCard
                     key={b.id}
                     bookmark={b}
@@ -513,7 +556,7 @@ export function StudyPanel({
             {/* Notes Section */}
             {filteredNotes.length > 0 && (
               <div className="space-y-2">
-                {activeTab === "ALL" && bookmarks.length > 0 && (
+                {activeTab === "ALL" && filteredBookmarks.length > 0 && (
                   <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider px-1 pt-1">
                     Anotações ({filteredNotes.length})
                   </div>
@@ -523,6 +566,8 @@ export function StudyPanel({
                     key={n.id}
                     note={n}
                     subjectId={subjectId}
+                    isHighlighted={selectedNoteId === n.id}
+                    onSelect={() => onSelectNote?.(n.id, n.pageNumber)}
                     onNavigateToPage={onNavigateToPage}
                     onDeleted={(id) =>
                       setNotes((prev) => prev.filter((item) => item.id !== id))
@@ -533,14 +578,18 @@ export function StudyPanel({
             )}
 
             {/* Empty State */}
-            {filteredNotes.length === 0 && (!showBookmarks || bookmarks.length === 0) && (
+            {filteredNotes.length === 0 && (!showBookmarks || filteredBookmarks.length === 0) && (
               <div className="text-center py-12 px-4 space-y-2">
                 <FileText className="h-8 w-8 text-neutral-700 mx-auto" />
                 <p className="text-xs font-medium text-neutral-300">
-                  Nenhum registro nesta categoria
+                  {onlyCurrentPage
+                    ? `Nenhum registro na página ${currentPageNumber}`
+                    : "Nenhum registro nesta categoria"}
                 </p>
                 <p className="text-[11px] text-neutral-500">
-                  Clique em <strong>Nova Nota</strong> para anotar dúvidas, fórmulas e pontos importantes da aula.
+                  {onlyCurrentPage
+                    ? "Desative o filtro de página ou crie um pin / trecho nesta página."
+                    : "Clique em Nova Nota ou use as ferramentas Pin/Trecho no slide."}
                 </p>
               </div>
             )}

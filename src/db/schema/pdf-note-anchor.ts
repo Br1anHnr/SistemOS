@@ -1,35 +1,37 @@
 import {
   pgTable,
   uuid,
-  text,
   integer,
+  jsonb,
   timestamp,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { topics } from "./topic";
 import { subjectMaterials } from "./material";
+import { topicNotes } from "./topic-note";
 
-export const topicNoteTypeEnum = pgEnum("topic_note_type", [
-  "NOTE",
-  "IMPORTANT",
-  "QUESTION",
-  "FORMULA",
-  "EXAM",
+export const pdfAnchorTypeEnum = pgEnum("pdf_anchor_type", [
+  "POINT",
+  "REGION",
 ]);
 
-export const topicNotes = pgTable("topic_notes", {
+export const pdfNoteAnchors = pgTable("pdf_note_anchors", {
   id: uuid("id").defaultRandom().primaryKey(),
+  noteId: uuid("note_id")
+    .notNull()
+    .references(() => topicNotes.id, { onDelete: "cascade" }),
+
   topicId: uuid("topic_id")
     .notNull()
     .references(() => topics.id, { onDelete: "cascade" }),
 
   materialId: uuid("material_id").references(() => subjectMaterials.id, {
-    onDelete: "set null",
+    onDelete: "cascade",
   }),
 
-  type: topicNoteTypeEnum("type").notNull().default("NOTE"),
-  content: text("content").notNull(),
-  pageNumber: integer("page_number"),
+  pageNumber: integer("page_number").notNull(),
+  anchorType: pdfAnchorTypeEnum("anchor_type").notNull().default("POINT"),
+  data: jsonb("data").notNull(),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

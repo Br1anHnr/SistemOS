@@ -23,3 +23,4 @@ export { subjectMaterials } from "./material";
 export { topicNotes, topicNoteTypeEnum } from "./topic-note";
 export { materialBookmarks, materialBookmarkTypeEnum } from "./material-bookmark";
 export { pdfAnnotations, pdfAnnotationTypeEnum } from "./pdf-annotation";
+export { pdfNoteAnchors, pdfAnchorTypeEnum } from "./pdf-note-anchor";

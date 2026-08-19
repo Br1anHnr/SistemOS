@@ -33,7 +33,7 @@ export async function getNotesCountsBySubjectId(subjectId: string) {
 export async function createTopicNote(data: {
   topicId: string;
   materialId?: string | null;
-  type?: "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA";
+  type?: "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "EXAM";
   content: string;
   pageNumber?: number | null;
 }) {
@@ -55,7 +55,7 @@ export async function createTopicNote(data: {
 export async function updateTopicNote(
   id: string,
   data: Partial<{
-    type: "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA";
+    type: "NOTE" | "IMPORTANT" | "QUESTION" | "FORMULA" | "EXAM";
     content: string;
     pageNumber: number | null;
   }>

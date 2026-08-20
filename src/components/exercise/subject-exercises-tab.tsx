@@ -25,7 +25,7 @@ import { ExerciseSetCard } from "./exercise-set-card";
 import { ExerciseCard } from "./exercise-card";
 import { ExerciseSetModal } from "./exercise-set-modal";
 import { ExerciseModal } from "./exercise-modal";
-import { ExerciseSetDetailModal } from "./exercise-set-detail-modal";
+import { ExerciseSetWorkspaceModal } from "./exercise-set-workspace-modal";
 import { ExerciseDetailModal } from "./exercise-detail-modal";
 import { AttemptRegisterModal } from "./attempt-register-modal";
 
@@ -61,7 +61,7 @@ export function SubjectExercisesTab({
   const [exerciseToEdit, setExerciseToEdit] = React.useState<ExerciseItem | null>(null);
   const [defaultSetIdForExercise, setDefaultSetIdForExercise] = React.useState<string | null>(null);
 
-  const [activeSetDetail, setActiveSetDetail] = React.useState<ExerciseSetItem | null>(null);
+  const [activeWorkspaceSetId, setActiveWorkspaceSetId] = React.useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = React.useState<string | null>(null);
 
   // Direct Attempt Modal State
@@ -311,7 +311,7 @@ export function SubjectExercisesTab({
               <ExerciseSetCard
                 key={s.id}
                 set={s}
-                onOpenSet={(item) => setActiveSetDetail(item)}
+                onOpenSet={(item) => setActiveWorkspaceSetId(item.id)}
                 onEditSet={(item) => {
                   setSetToEdit(item);
                   setSetModalOpen(true);
@@ -380,18 +380,15 @@ export function SubjectExercisesTab({
         onSuccess={loadData}
       />
 
-      {/* Modal 3: Exercise Set Detail (Questions inside Set) */}
-      <ExerciseSetDetailModal
-        open={!!activeSetDetail}
-        onOpenChange={(open) => !open && setActiveSetDetail(null)}
-        set={activeSetDetail}
-        exercises={exercises}
-        onOpenExercise={(ex) => setSelectedExerciseId(ex.id)}
-        onAddExerciseToSet={(setId) => {
-          setExerciseToEdit(null);
-          setDefaultSetIdForExercise(setId);
-          setExerciseModalOpen(true);
-        }}
+      {/* Modal 3: Exercise Set Workspace (PDF / Image Document Viewer + Question Mapping) */}
+      <ExerciseSetWorkspaceModal
+        open={!!activeWorkspaceSetId}
+        onOpenChange={(open) => !open && setActiveWorkspaceSetId(null)}
+        setId={activeWorkspaceSetId}
+        subjectId={subjectId}
+        subjectName={subjectName}
+        topicsList={topics}
+        onSuccess={loadData}
       />
 
       {/* Modal 4: Exercise Detail & Attempt Timeline View */}

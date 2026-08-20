@@ -33,9 +33,11 @@ import {
   toggleExerciseNeedsReviewAction,
   deleteExerciseAttemptAction,
   deleteAttemptAttachmentAction,
+  deleteExerciseSourceRegionAction,
 } from "@/actions/exercise.actions";
 import { AttemptRegisterModal } from "./attempt-register-modal";
 import { ImageLightboxModal } from "./image-lightbox-modal";
+import { ExerciseSourceRegionSnippet } from "./exercise-source-region-snippet";
 import { getLocalFileUrl } from "@/lib/file-storage";
 
 interface ExerciseDetailModalProps {
@@ -43,6 +45,7 @@ interface ExerciseDetailModalProps {
   onOpenChange: (open: boolean) => void;
   exerciseId: string | null;
   subjectId: string;
+  sourceFileUrl?: string | null;
   onEditExercise?: (exercise: ExerciseItem) => void;
   onSuccess?: () => void;
 }
@@ -52,6 +55,7 @@ export function ExerciseDetailModal({
   onOpenChange,
   exerciseId,
   subjectId,
+  sourceFileUrl,
   onEditExercise,
   onSuccess,
 }: ExerciseDetailModalProps) {
@@ -164,6 +168,20 @@ export function ExerciseDetailModal({
       }
     } catch {
       toast("Erro ao remover foto.", "error");
+    }
+  };
+
+  const handleDeleteSourceRegion = async (regionId: string) => {
+    if (!confirm("Deseja remover este trecho do enunciado?")) return;
+    try {
+      const res = await deleteExerciseSourceRegionAction(regionId, subjectId);
+      if (res.success) {
+        toast("Trecho removido.");
+        await loadExerciseDetails();
+        onSuccess?.();
+      }
+    } catch {
+      toast("Erro ao remover trecho.", "error");
     }
   };
 
@@ -326,15 +344,51 @@ export function ExerciseDetailModal({
                     Enunciado da Questão
                   </div>
 
+                  {/* Document Source Regions (Trechos recortados do PDF/Lista) */}
+                  {exercise.sourceRegions && exercise.sourceRegions.length > 0 && sourceFileUrl && (
+                    <div className="space-y-2.5 pb-2">
+                      <div className="text-[11px] font-medium text-purple-300 flex items-center gap-1.5">
+                        <span>Trechos do Documento ({exercise.sourceRegions.length})</span>
+                      </div>
+                      <div className="space-y-3">
+                        {exercise.sourceRegions.map((region, idx) => (
+                          <div
+                            key={region.id}
+                            className="p-2.5 bg-neutral-900/90 rounded-lg border border-neutral-800 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                              <span className="font-semibold text-neutral-300">
+                                Trecho #{idx + 1} • Página {region.pageNumber}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSourceRegion(region.id)}
+                                className="text-neutral-500 hover:text-red-400 p-1"
+                                title="Remover trecho"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <ExerciseSourceRegionSnippet
+                              region={region}
+                              fileUrl={sourceFileUrl}
+                              className="max-h-80 w-full"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {exercise.statement ? (
                     <div className="text-neutral-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans">
                       {exercise.statement}
                     </div>
-                  ) : (
+                  ) : !exercise.sourceRegions || exercise.sourceRegions.length === 0 ? (
                     <div className="text-neutral-500 italic text-xs">
                       Sem texto de enunciado cadastrado.
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Statement Images Gallery (Large preview) */}
                   {exercise.attachments && exercise.attachments.length > 0 && (

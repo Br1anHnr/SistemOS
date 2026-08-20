@@ -18,6 +18,9 @@ import {
   deleteExerciseAttempt,
   deleteExerciseAttachment,
   deleteAttemptAttachment,
+  addExerciseSourceRegion,
+  deleteExerciseSourceRegion,
+  getExerciseSourceRegions,
 } from "@/services/exercise.service";
 import {
   createExerciseSetSchema,
@@ -25,6 +28,7 @@ import {
   createExerciseSchema,
   updateExerciseSchema,
   createExerciseAttemptSchema,
+  createExerciseSourceRegionSchema,
 } from "@/validations";
 import { z } from "zod";
 
@@ -213,3 +217,42 @@ export async function deleteAttemptAttachmentAction(attachmentId: string, subjec
     return { success: false, error: err?.message || "Erro ao excluir foto da resolução." };
   }
 }
+
+export async function addExerciseSourceRegionAction(
+  rawData: z.input<typeof createExerciseSourceRegionSchema>,
+  subjectId?: string
+) {
+  try {
+    const parsed = createExerciseSourceRegionSchema.parse(rawData);
+    const created = await addExerciseSourceRegion(parsed);
+    if (subjectId) {
+      revalidatePath(`/subjects/${subjectId}`);
+    }
+    return { success: true, data: created };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao adicionar trecho da questão." };
+  }
+}
+
+export async function deleteExerciseSourceRegionAction(
+  regionId: string,
+  subjectId: string
+) {
+  try {
+    const deleted = await deleteExerciseSourceRegion(regionId, subjectId);
+    revalidatePath(`/subjects/${subjectId}`);
+    return { success: true, data: deleted };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao remover trecho da questão." };
+  }
+}
+
+export async function getExerciseSourceRegionsAction(exerciseId: string) {
+  try {
+    const data = await getExerciseSourceRegions(exerciseId);
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Erro ao carregar trechos da questão." };
+  }
+}
+

@@ -2,6 +2,7 @@ import { db } from "@/db";
 import {
   exerciseSets,
   exercises,
+  exerciseSourceRegions,
   exerciseAttachments,
   exerciseAttempts,
   exerciseAttemptAttachments,
@@ -14,6 +15,7 @@ import {
   ExerciseSetItem,
   ExerciseItem,
   ExerciseAttemptItem,
+  ExerciseSourceRegionItem,
   calculateExerciseDerivedStatus,
   calculateExerciseSetProgress,
 } from "@/domain/exercises";
@@ -23,6 +25,7 @@ import {
   createExerciseSchema,
   updateExerciseSchema,
   createExerciseAttemptSchema,
+  createExerciseSourceRegionSchema,
 } from "@/validations";
 import { z } from "zod";
 
@@ -270,6 +273,12 @@ export async function getExercisesBySubjectId(
     .from(exerciseAttachments)
     .orderBy(asc(exerciseAttachments.orderIndex));
 
+  // Fetch source regions
+  const allSourceRegions = await db
+    .select()
+    .from(exerciseSourceRegions)
+    .orderBy(asc(exerciseSourceRegions.orderIndex), asc(exerciseSourceRegions.createdAt));
+
   return list.map((ex) => {
     const exAttempts = allAttempts
       .filter((a) => a.exerciseId === ex.id)
@@ -279,6 +288,7 @@ export async function getExercisesBySubjectId(
       }));
 
     const exAttachments = allStatementAttachments.filter((sa) => sa.exerciseId === ex.id);
+    const exSourceRegions = allSourceRegions.filter((sr) => sr.exerciseId === ex.id);
     const derivedStatus = calculateExerciseDerivedStatus(exAttempts, ex.needsReview);
 
     return {
@@ -286,6 +296,7 @@ export async function getExercisesBySubjectId(
       status: derivedStatus,
       attempts: exAttempts as ExerciseAttemptItem[],
       attachments: exAttachments,
+      sourceRegions: exSourceRegions,
     };
   });
 }
@@ -348,6 +359,12 @@ export async function getExerciseById(
     .where(eq(exerciseAttachments.exerciseId, id))
     .orderBy(asc(exerciseAttachments.orderIndex));
 
+  const sourceRegions = await db
+    .select()
+    .from(exerciseSourceRegions)
+    .where(eq(exerciseSourceRegions.exerciseId, id))
+    .orderBy(asc(exerciseSourceRegions.orderIndex), asc(exerciseSourceRegions.createdAt));
+
   const populatedAttempts = attempts.map((att) => ({
     ...att,
     attachments: attemptAttachments.filter((aa) => aa.attemptId === att.id),
@@ -360,6 +377,7 @@ export async function getExerciseById(
     status: derivedStatus,
     attempts: populatedAttempts as ExerciseAttemptItem[],
     attachments: statementAttachments,
+    sourceRegions: sourceRegions,
   };
 }
 
@@ -442,6 +460,22 @@ export async function createExercise(
         originalName: img.originalName,
         caption: img.caption || null,
         orderIndex: idx,
+      }))
+    );
+  }
+
+  // Attach source regions if provided
+  if (data.sourceRegions && data.sourceRegions.length > 0) {
+    await db.insert(exerciseSourceRegions).values(
+      data.sourceRegions.map((sr, idx) => ({
+        exerciseId: created.id,
+        materialId: sr.materialId || null,
+        pageNumber: sr.pageNumber || 1,
+        x: sr.x,
+        y: sr.y,
+        width: sr.width,
+        height: sr.height,
+        orderIndex: sr.orderIndex ?? idx,
       }))
     );
   }
@@ -615,3 +649,73 @@ export async function deleteAttemptAttachment(attachmentId: string) {
 
   return deleted;
 }
+
+// ─── EXERCISE SOURCE REGIONS (RECORTES DO PDF/MATERIAL) ──────────────────────
+
+export async function addExerciseSourceRegion(
+  data: z.infer<typeof createExerciseSourceRegionSchema>
+): Promise<ExerciseSourceRegionItem> {
+  const [created] = await db
+    .insert(exerciseSourceRegions)
+    .values({
+      exerciseId: data.exerciseId,
+      materialId: data.materialId || null,
+      pageNumber: data.pageNumber || 1,
+      x: data.x,
+      y: data.y,
+      width: data.width,
+      height: data.height,
+      orderIndex: data.orderIndex ?? 0,
+    })
+    .returning();
+
+  return created;
+}
+
+export async function deleteExerciseSourceRegion(
+  regionId: string,
+  subjectId: string
+) {
+  // Ensure the region belongs to an exercise in the specified subject
+  const [region] = await db
+    .select({
+      id: exerciseSourceRegions.id,
+      exerciseId: exerciseSourceRegions.exerciseId,
+      subjectId: exercises.subjectId,
+    })
+    .from(exerciseSourceRegions)
+    .innerJoin(exercises, eq(exerciseSourceRegions.exerciseId, exercises.id))
+    .where(
+      and(
+        eq(exerciseSourceRegions.id, regionId),
+        eq(exercises.subjectId, subjectId)
+      )
+    );
+
+  if (!region) {
+    throw new Error(
+      "Trecho de exercício não encontrado ou não pertence a esta disciplina."
+    );
+  }
+
+  const [deleted] = await db
+    .delete(exerciseSourceRegions)
+    .where(eq(exerciseSourceRegions.id, regionId))
+    .returning();
+
+  return deleted;
+}
+
+export async function getExerciseSourceRegions(
+  exerciseId: string
+): Promise<ExerciseSourceRegionItem[]> {
+  return db
+    .select()
+    .from(exerciseSourceRegions)
+    .where(eq(exerciseSourceRegions.exerciseId, exerciseId))
+    .orderBy(
+      asc(exerciseSourceRegions.orderIndex),
+      asc(exerciseSourceRegions.createdAt)
+    );
+}
+

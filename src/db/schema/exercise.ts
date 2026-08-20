@@ -4,6 +4,7 @@ import {
   varchar,
   text,
   integer,
+  doublePrecision,
   boolean,
   date,
   timestamp,
@@ -12,6 +13,7 @@ import {
 import { subjects } from "./subject";
 import { assessments } from "./assessment";
 import { topics } from "./topic";
+import { subjectMaterials } from "./material";
 
 // Status of an exercise
 export const exerciseStatusEnum = pgEnum("exercise_status", [
@@ -154,3 +156,26 @@ export const exerciseAttemptAttachments = pgTable("exercise_attempt_attachments"
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// 6. Exercise Source Regions (Trechos recortados do PDF/Material da Lista)
+export const exerciseSourceRegions = pgTable("exercise_source_regions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  exerciseId: uuid("exercise_id")
+    .notNull()
+    .references(() => exercises.id, { onDelete: "cascade" }),
+
+  // Optional link to material if uploaded as subject material
+  materialId: uuid("material_id").references(() => subjectMaterials.id, {
+    onDelete: "set null",
+  }),
+
+  pageNumber: integer("page_number").notNull().default(1),
+  x: doublePrecision("x").notNull(),
+  y: doublePrecision("y").notNull(),
+  width: doublePrecision("width").notNull(),
+  height: doublePrecision("height").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+

@@ -19,15 +19,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ExerciseItem } from "@/domain/exercises";
 import { getLocalFileUrl } from "@/lib/file-storage";
+import { ExerciseSourceRegionSnippet } from "./exercise-source-region-snippet";
 
 interface ExerciseCardProps {
   exercise: ExerciseItem;
+  sourceFileUrl?: string | null;
   onOpenDetail: (exercise: ExerciseItem) => void;
   onNewAttempt?: (exercise: ExerciseItem) => void;
 }
 
 export function ExerciseCard({
   exercise,
+  sourceFileUrl,
   onOpenDetail,
   onNewAttempt,
 }: ExerciseCardProps) {
@@ -109,9 +112,15 @@ export function ExerciseCard({
           </div>
         </div>
 
-        {/* Content Preview: Thumbnail + Statement Snippet */}
+        {/* Content Preview: Source Region Snippet / Thumbnail + Statement Snippet */}
         <div className="mt-3 flex gap-3">
-          {thumbnailUrl && (
+          {exercise.sourceRegions && exercise.sourceRegions.length > 0 && sourceFileUrl ? (
+            <ExerciseSourceRegionSnippet
+              region={exercise.sourceRegions[0]}
+              fileUrl={sourceFileUrl}
+              className="w-20 h-16 shrink-0 group-hover:scale-105 transition-transform"
+            />
+          ) : thumbnailUrl ? (
             <div className="w-16 h-16 rounded-lg bg-neutral-900 border border-neutral-800 overflow-hidden shrink-0 flex items-center justify-center">
               <img
                 src={thumbnailUrl}
@@ -119,12 +128,16 @@ export function ExerciseCard({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform"
               />
             </div>
-          )}
+          ) : null}
 
           <div className="flex-1 min-w-0">
             {exercise.statement ? (
               <p className="text-xs text-neutral-300 line-clamp-3 leading-relaxed font-sans">
                 {exercise.statement}
+              </p>
+            ) : exercise.sourceRegions && exercise.sourceRegions.length > 0 ? (
+              <p className="text-xs text-purple-300/90 italic flex items-center gap-1">
+                <span className="font-semibold text-purple-400">Pág. {exercise.sourceRegions[0].pageNumber}</span> • Recorte da lista ({exercise.sourceRegions.length} {exercise.sourceRegions.length === 1 ? "trecho" : "trechos"})
               </p>
             ) : thumbnailUrl ? (
               <p className="text-xs text-neutral-400 italic flex items-center gap-1">

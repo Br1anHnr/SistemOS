@@ -56,6 +56,19 @@ export interface ExerciseAttemptAttachmentItem {
   orderIndex: number;
 }
 
+export interface ExerciseSourceRegionItem {
+  id: string;
+  exerciseId: string;
+  materialId?: string | null;
+  pageNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  orderIndex: number;
+  createdAt?: string | Date;
+}
+
 export interface ExerciseItem {
   id: string;
   subjectId: string;
@@ -76,6 +89,7 @@ export interface ExerciseItem {
   // Populated relations
   attempts?: ExerciseAttemptItem[];
   attachments?: ExerciseAttachmentItem[];
+  sourceRegions?: ExerciseSourceRegionItem[];
   topicTitle?: string | null;
   exerciseSetTitle?: string | null;
   assessmentTitle?: string | null;

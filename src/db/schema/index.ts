@@ -32,6 +32,7 @@ export {
 export {
   exerciseSets,
   exercises,
+  exerciseSourceRegions,
   exerciseAttachments,
   exerciseAttempts,
   exerciseAttemptAttachments,

@@ -73,20 +73,31 @@ test.describe("Exercises Module (Exercícios) End-to-End Tests", () => {
   test("E2E 3 — Register Resolution, Verify 'Ver resolução' CTA on Card & Large Resolution View", async ({ page }) => {
     await openSubjectExercisesTab(page);
 
+    // Create a specific exercise for this test
+    const novoExBtn = page.locator("button:has-text('Novo Exercício')").first();
+    await expect(novoExBtn).toBeVisible({ timeout: 5000 });
+    await novoExBtn.click();
+
+    const uniqueRef = `Q3-${Math.floor(Math.random() * 899 + 100)}`;
+    await page.locator("input[placeholder*='Ex: Q01']").fill(uniqueRef);
+    await page.locator("textarea[placeholder*='Escreva o texto do problema']").fill("Problema específico para teste de resolução.");
+    await page.locator("button:has-text('Cadastrar Exercício')").click();
+    await page.waitForTimeout(600);
+
     // Switch to 'Todos' view
     const todosTabBtn = page.locator("button:has-text('Todos')").first();
     await todosTabBtn.click();
     await page.waitForTimeout(300);
 
-    // Click on the first exercise card (Resolver)
-    const exerciseCard = page.locator("button:has-text('Resolver')").first();
-    await expect(exerciseCard).toBeVisible({ timeout: 6000 });
-    await exerciseCard.click();
+    // Click on the specific exercise card
+    const cardLocator = page.locator(`div:has-text('${uniqueRef}')`).locator("button:has-text('Resolver')").first();
+    await expect(cardLocator).toBeVisible({ timeout: 6000 });
+    await cardLocator.click();
     await page.waitForTimeout(400);
 
-    // Verify modal is open and shows Enunciado in highlight
-    await expect(page.locator("text=Enunciado da Questão")).toBeVisible();
-    await expect(page.locator("text=Minha Resolução")).toBeVisible();
+    // Verify modal is open and shows Enunciado
+    await expect(page.getByText("Enunciado da Questão", { exact: true })).toBeVisible();
+    await expect(page.getByText("Minha Resolução", { exact: true })).toBeVisible();
 
     // Click Registrar Resolução
     const registrarBtn = page.locator("button:has-text('Registrar Resolução')").first();
@@ -112,45 +123,60 @@ test.describe("Exercises Module (Exercícios) End-to-End Tests", () => {
     await page.waitForTimeout(400);
 
     // Verify card now shows 'Ver resolução' CTA and 'Resolvido' status
-    await expect(page.locator("button:has-text('Ver resolução')").first()).toBeVisible();
-    await expect(page.locator("text=Resolvido").first()).toBeVisible();
+    await expect(page.locator(`div:has-text('${uniqueRef}')`).locator("button:has-text('Ver resolução')").first()).toBeVisible();
+    await expect(page.locator(`div:has-text('${uniqueRef}')`).locator("text=Resolvido").first()).toBeVisible();
   });
 
   test("E2E 4 — Register Second Attempt (Nova Tentativa) and verify recent focus & collapsible history", async ({ page }) => {
     await openSubjectExercisesTab(page);
+
+    // Create an exercise specifically for two attempts test
+    const novoExBtn = page.locator("button:has-text('Novo Exercício')").first();
+    await expect(novoExBtn).toBeVisible({ timeout: 5000 });
+    await novoExBtn.click();
+
+    const uniqueRef = `Q4-${Math.floor(Math.random() * 899 + 100)}`;
+    await page.locator("input[placeholder*='Ex: Q01']").fill(uniqueRef);
+    await page.locator("textarea[placeholder*='Escreva o texto do problema']").fill("Problema específico para múltiplas tentativas.");
+    await page.locator("button:has-text('Cadastrar Exercício')").click();
+    await page.waitForTimeout(600);
 
     // Switch to 'Todos' view
     const todosTabBtn = page.locator("button:has-text('Todos')").first();
     await todosTabBtn.click();
     await page.waitForTimeout(300);
 
-    // Open an exercise that has a resolution
-    const verResolucaoBtn = page.locator("button:has-text('Ver resolução')").first();
-    await expect(verResolucaoBtn).toBeVisible({ timeout: 6000 });
-    await verResolucaoBtn.click();
+    // Open detail and register 1st attempt
+    const cardLocator = page.locator(`div:has-text('${uniqueRef}')`).locator("button:has-text('Resolver')").first();
+    await expect(cardLocator).toBeVisible({ timeout: 6000 });
+    await cardLocator.click();
     await page.waitForTimeout(400);
 
-    // Click 'Nova Tentativa' inside the open exercise modal
-    const novaTentativaBtn = page.locator(".fixed.z-50 button:has-text('Nova Tentativa')").first();
-    await expect(novaTentativaBtn).toBeVisible();
+    // Attempt 1: Errei
+    await page.locator("button:has-text('Registrar Resolução')").first().click();
+    await page.waitForTimeout(300);
+    await page.locator("button:has-text('Errei')").first().click();
+    await page.locator("button:has-text('Salvar Resolução')").click();
+    await page.waitForTimeout(600);
+
+    // Now click 'Nova Tentativa' inside the open exercise modal for Attempt 2
+    const novaTentativaBtn = page.locator("button:has-text('Nova Tentativa')").first();
+    await expect(novaTentativaBtn).toBeVisible({ timeout: 5000 });
     await novaTentativaBtn.click();
     await page.waitForTimeout(300);
 
-    // Select 'Parcial' result
+    // Attempt 2: Parcial
     const parcialBtn = page.locator("button:has-text('Parcial')").first();
     await parcialBtn.click();
     await page.locator("textarea[placeholder*='Cuidado com a conversão']").fill("Segunda tentativa: esqueci a densidade relativa.");
-
-    // Save
-    const salvarBtn = page.locator("button:has-text('Salvar Resolução')");
-    await salvarBtn.click();
+    await page.locator("button:has-text('Salvar Resolução')").click();
     await page.waitForTimeout(600);
 
-    // Verify latest attempt is now Parcial
+    // Verify latest attempt is now Parcial and marked Tentativa #2
     await expect(page.locator("text=Última Resolução (Tentativa #2)")).toBeVisible({ timeout: 6000 });
     await expect(page.locator("text=Parcial").first()).toBeVisible();
 
-    // Verify collapsible history button is visible
+    // Verify collapsible history button is visible and contains Tentativa #1
     const historyBtn = page.locator("button:has-text('Histórico de tentativas anteriores')");
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();

@@ -627,11 +627,37 @@ export const createExerciseSchema = z.object({
       })
     )
     .optional(),
+  sourceRegions: z
+    .array(
+      z.object({
+        materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+        pageNumber: z.number().int().min(1).default(1),
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        width: z.number().min(0).max(1),
+        height: z.number().min(0).max(1),
+        orderIndex: z.number().int().default(0).optional(),
+      })
+    )
+    .optional(),
 });
 
 export const updateExerciseSchema = createExerciseSchema
   .omit({ subjectId: true })
   .partial();
+
+export const createExerciseSourceRegionSchema = z.object({
+  exerciseId: z
+    .string({ required_error: "ID do exercício é obrigatório." })
+    .uuid("ID de exercício inválido."),
+  materialId: z.string().uuid("ID de material inválido.").optional().nullable(),
+  pageNumber: z.number().int().min(1).default(1),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().min(0).max(1),
+  height: z.number().min(0).max(1),
+  orderIndex: z.number().int().default(0).optional(),
+});
 
 export const createExerciseAttemptSchema = z.object({
   exerciseId: z

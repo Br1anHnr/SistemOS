@@ -1,68 +1,64 @@
 # SistemOS
 
-Aplicação web pessoal para gestão acadêmica e planejamento de estudos.
+Estou construindo o SistemOS para organizar meus estudos e acompanhar a vida acadêmica em uma aplicação pessoal. Ele já funciona localmente, mas ainda estou concluindo o desenvolvimento.
 
-**Estado:** funciona localmente e continua em desenvolvimento. Ainda não é uma aplicação finalizada; não há resultados de uso por terceiros apresentados aqui.
+## Por que comecei
 
-## Problema e proposta
+Queria reunir informações que ficam espalhadas entre horários, avaliações, tarefas e planejamento de estudos. Meu objetivo é centralizar esse acompanhamento e facilitar a organização da rotina.
 
-Reduzir a dispersão das informações acadêmicas, reunindo planejamento e acompanhamento dos estudos em uma aplicação pessoal. A lista de objetivos abaixo descreve o escopo do produto e não certifica que todas as jornadas estejam concluídas.
+## Escopo que estou desenvolvendo
 
-## Demonstração a preparar
+Controle de semestres, disciplinas, horários, faltas e frequência, avaliações, notas e médias, tarefas, sessões de estudo, calendário, risco acadêmico e progresso da graduação.
 
-Com dados fictícios, mostrar cadastro de disciplina, registro de avaliação e acompanhamento da média. Identificar as etapas que já funcionam e as que dependem de desenvolvimento. Uma gravação local permite demonstrar o estado atual, sem anunciar disponibilidade pública.
+Essa é a visão do produto. Ainda estou concluindo e validando as jornadas, então nem tudo está pronto.
 
-## Objetivo
-Centralizar a vida acadêmica de um único usuário: controle de semestres, disciplinas, horários, faltas/frequência, avaliações, notas e médias, tarefas, sessões de estudo, calendário, cálculo de risco acadêmico e progresso da graduação.
+## Tecnologias
 
-## Stack
-- **Framework:** Next.js (App Router)
-- **Linguagem:** TypeScript (estrito)
-- **Estilização & UI:** Tailwind CSS + shadcn/ui
-- **Banco de Dados & ORM:** PostgreSQL (Supabase) + Drizzle ORM
-- **Validação:** Zod
-- **Testes:** Vitest
+- Next.js com App Router e TypeScript.
+- Tailwind CSS e shadcn/ui.
+- PostgreSQL, com Supabase e Drizzle ORM.
+- Zod para validação.
+- Vitest para testes.
 
 ## Como executar localmente
 
-### 1. Instalar dependências
-```bash
+Instale as dependências:
+
+```sh
 npm install
 ```
 
-### 2. Configurar variáveis de ambiente
-Copie o arquivo de exemplo e preencha a URL de conexão do PostgreSQL:
-```bash
+Copie o arquivo de exemplo e configure a conexão com seu PostgreSQL:
+
+```sh
 cp .env.example .env.local
 ```
 
-### 3. Scripts disponíveis
-```bash
-# Desenvolvimento local
+Inicie o desenvolvimento:
+
+```sh
 npm run dev
+```
 
-# Verificação de tipos TypeScript
+Comandos de verificação e build:
+
+```sh
 npm run typecheck
-
-# Linting
 npm run lint
-
-# Execução de testes unitários
 npm run test
-
-# Build de produção
 npm run build
 ```
 
 ## Documentação
-A especificação funcional, modelo de dados, regras de negócio e roadmap do projeto estão centralizados em:
-- [docs/MASTER_PRD.md](docs/MASTER_PRD.md)
 
-## Próximos passos para o portfólio
+Mantenho a especificação funcional, o modelo de dados, as regras de negócio e o roadmap em [docs/MASTER_PRD.md](docs/MASTER_PRD.md).
 
-- [ ] Conferir e documentar quais jornadas estão concluídas.
-- [ ] Adicionar capturas com dados fictícios e uma demonstração curta.
+## Meus próximos passos
+
+- [ ] Concluir e documentar as jornadas principais.
+- [ ] Gravar uma demonstração local com dados fictícios, mostrando uma disciplina, suas avaliações e o acompanhamento da média.
+- [ ] Adicionar capturas das telas.
 - [ ] Validar a configuração em uma instalação nova.
 - [ ] Registrar os resultados dos testes com data e ambiente.
 
-Os comandos acima são os scripts do projeto; não foram executados nesta revisão documental. Não há funcionalidade de LLM demonstrada neste README. Uso de IA como apoio ao desenvolvimento deve ser descrito separadamente, com exemplos reais do processo.
+Ainda não disponibilizei uma versão pública para uso de outras pessoas.

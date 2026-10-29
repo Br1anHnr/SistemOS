@@ -2,6 +2,16 @@
 
 Aplicação web pessoal para gestão acadêmica e planejamento de estudos.
 
+**Estado:** funciona localmente e continua em desenvolvimento. Ainda não é uma aplicação finalizada; não há resultados de uso por terceiros apresentados aqui.
+
+## Problema e proposta
+
+Reduzir a dispersão das informações acadêmicas, reunindo planejamento e acompanhamento dos estudos em uma aplicação pessoal. A lista de objetivos abaixo descreve o escopo do produto e não certifica que todas as jornadas estejam concluídas.
+
+## Demonstração a preparar
+
+Com dados fictícios, mostrar cadastro de disciplina, registro de avaliação e acompanhamento da média. Identificar as etapas que já funcionam e as que dependem de desenvolvimento. Uma gravação local permite demonstrar o estado atual, sem anunciar disponibilidade pública.
+
 ## Objetivo
 Centralizar a vida acadêmica de um único usuário: controle de semestres, disciplinas, horários, faltas/frequência, avaliações, notas e médias, tarefas, sessões de estudo, calendário, cálculo de risco acadêmico e progresso da graduação.
 
@@ -47,3 +57,12 @@ npm run build
 ## Documentação
 A especificação funcional, modelo de dados, regras de negócio e roadmap do projeto estão centralizados em:
 - [docs/MASTER_PRD.md](docs/MASTER_PRD.md)
+
+## Próximos passos para o portfólio
+
+- [ ] Conferir e documentar quais jornadas estão concluídas.
+- [ ] Adicionar capturas com dados fictícios e uma demonstração curta.
+- [ ] Validar a configuração em uma instalação nova.
+- [ ] Registrar os resultados dos testes com data e ambiente.
+
+Os comandos acima são os scripts do projeto; não foram executados nesta revisão documental. Não há funcionalidade de LLM demonstrada neste README. Uso de IA como apoio ao desenvolvimento deve ser descrito separadamente, com exemplos reais do processo.
